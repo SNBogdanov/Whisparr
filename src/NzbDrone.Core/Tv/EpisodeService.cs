@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
@@ -284,13 +285,21 @@ namespace NzbDrone.Core.Tv
             return null;
         }
 
+        private Regex _BTS = new Regex("\\bbts\\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         private List<Episode> MatchEpisodes(string parsedEpisodeTitle, List<Episode> episodes, int matchLevel = 0)
         {
             var matches = new List<Episode>();
+            var isBTS = _BTS.IsMatch(parsedEpisodeTitle);
 
             foreach (var episode in episodes)
             {
                 var cleanTitle = episode.Title.IsNotNullOrWhiteSpace() ? Parser.Parser.NormalizeEpisodeTitle(episode.Title) : string.Empty;
+                var isEpisodeBTS = _BTS.IsMatch(cleanTitle);
+                if (isEpisodeBTS)
+                {
+                    cleanTitle = _BTS.Replace(cleanTitle, " ");
+                }
 
                 // If parsed title matches title, consider a match
                 if (cleanTitle.IsNotNullOrWhiteSpace() && parsedEpisodeTitle.Equals(cleanTitle))
@@ -307,7 +316,7 @@ namespace NzbDrone.Core.Tv
                 }
 
                 // Check if episode title is contained within the parsed release title (handles performer names + title)
-                if (cleanTitle.IsNotNullOrWhiteSpace() && parsedEpisodeTitle.Contains(cleanTitle))
+                if (cleanTitle.IsNotNullOrWhiteSpace() && parsedEpisodeTitle.Contains(cleanTitle) && (isBTS == isEpisodeBTS))
                 {
                     matches.Add(episode);
                     continue;
@@ -319,7 +328,7 @@ namespace NzbDrone.Core.Tv
                     var normalizedParsed = parsedEpisodeTitle.Replace(".", " ").Replace("-", " ").Replace("  ", " ").Trim();
                     var normalizedClean = cleanTitle.Replace(".", " ").Replace("-", " ").Replace("  ", " ").Trim();
 
-                    if (normalizedParsed.Contains(normalizedClean) || normalizedClean.Contains(normalizedParsed))
+                    if ((normalizedParsed.Contains(normalizedClean) || normalizedClean.Contains(normalizedParsed)) && (isBTS == isEpisodeBTS))
                     {
                         matches.Add(episode);
                         continue;
@@ -340,7 +349,7 @@ namespace NzbDrone.Core.Tv
                 }
 
                 // If parsed title matches performer, consider a match
-                if (cleanPerformers.Any(p => p.IsNotNullOrWhiteSpace() && parsedEpisodeTitle.Equals(p)))
+                if (cleanPerformers.Any(p => p.IsNotNullOrWhiteSpace() && parsedEpisodeTitle.Equals(p)) && (isBTS == isEpisodeBTS))
                 {
                     matches.Add(episode);
                     continue;
@@ -358,7 +367,7 @@ namespace NzbDrone.Core.Tv
                 if (cleanTitle.IsNotNullOrWhiteSpace())
                 {
                     // If parsed title contains a performer and the title then consider a match
-                    if (cleanPerformers.Any(x => parsedEpisodeTitle.Contains(x)) && parsedEpisodeTitle.Contains(cleanTitle))
+                    if (cleanPerformers.Any(x => parsedEpisodeTitle.Contains(x)) && parsedEpisodeTitle.Contains(cleanTitle) && (isBTS == isEpisodeBTS))
                     {
                         matches.Add(episode);
                         continue;
@@ -371,7 +380,7 @@ namespace NzbDrone.Core.Tv
                 }
 
                 // If all female performers are in title, consider a match
-                if (cleanFemalePerformers.Any() && cleanFemalePerformers.All(x => parsedEpisodeTitle.Contains(x)))
+                if (cleanFemalePerformers.Any() && cleanFemalePerformers.All(x => parsedEpisodeTitle.Contains(x)) && (isBTS == isEpisodeBTS))
                 {
                     matches.Add(episode);
                     continue;

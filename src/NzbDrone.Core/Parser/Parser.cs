@@ -110,6 +110,11 @@ namespace NzbDrone.Core.Parser
                 new Regex("^\\[(?<title>.+?)\\](?<releasetoken>.+?)(?:( - |\\s)(\\[|\\()?(?<airyear>(19|20)\\d{2})[-_.](?<airmonth>[0-1][0-9])[-_.](?<airday>[0-3][0-9])(\\]|\\))?)",
                     RegexOptions.IgnoreCase | RegexOptions.Compiled),
 
+                // Site title in brackets, date after title and performer
+                // [Site] Beautiful Episode - Loli - 22-07-2023 - 1080p
+                new Regex("^\\[(?<title>.+?)(?:[\\.\\/].*?)\\](?<releasetoken>.+?)(?:( - |\\s)(\\[|\\()?(?<airday>[0-3][0-9])[-_.](?<airmonth>[0-1][0-9])[-_.](?<airyear>(19|20)?\\d{2})(\\]|\\))?)",
+                    RegexOptions.IgnoreCase | RegexOptions.Compiled),
+
                 // Site - Performers - Title (Month DD, YYYY) [Quality]
                 // Pure Taboo - Sarah Arabic, Lily LaBeau - A Costly Divorce (June 24, 2025) [1080p HEVC x265]
                 new Regex(@"^(?<title>[^-]+?)(?<releasetoken>\s*-\s*.+?)\s*\(\s*(?<airmonthname>January|February|March|April|May|June|July|August|September|October|November|December)\s+(?<airday>[0-3]?\d),?\s+(?<airyear>(19|20)\d{2})\s*\)",
@@ -360,8 +365,8 @@ namespace NzbDrone.Core.Parser
                 var simpleTitle = SimpleTitleRegex.Replace(releaseTitle);
 
                 // TODO: Quick fix stripping [url] - prefixes and postfixes.
-                simpleTitle = WebsitePrefixRegex.Replace(simpleTitle);
-                simpleTitle = WebsitePostfixRegex.Replace(simpleTitle);
+                // simpleTitle = WebsitePrefixRegex.Replace(simpleTitle);
+                simpleTitle = WebsitePostfixRegex.Replace(releaseTitle);
 
                 simpleTitle = CleanTorrentSuffixRegex.Replace(simpleTitle);
 
@@ -403,6 +408,7 @@ namespace NzbDrone.Core.Parser
 
                             if (result != null)
                             {
+                                result.ReleaseTitle = releaseTitle;
                                 result.Languages = LanguageParser.ParseLanguages(releaseTitle);
                                 Logger.Debug("Languages parsed: {0}", string.Join(", ", result.Languages));
 
