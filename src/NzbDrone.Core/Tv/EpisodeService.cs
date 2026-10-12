@@ -19,7 +19,10 @@ namespace NzbDrone.Core.Tv
         List<Episode> GetEpisodes(IEnumerable<int> ids);
         Episode FindEpisode(int seriesId, int absoluteEpisodeNumber);
         Episode FindEpisodeByTitle(int seriesId, int seasonNumber, string releaseTitle);
+        Episode FindEpisodeByTitleUnique(int seriesId, int seasonNumber, string releaseTitle);
+        Episode FindEpisodeBySeasonAndToken(int seriesId, int seasonNumber, string episodeToken, string releaseTitle, bool requireUniqueTitle = false);
         Episode FindEpisode(int seriesId, string date, string part);
+        bool HasEpisodesOnDate(int seriesId, string date);
         Episode FindByExternalId(string externalId);
         List<Episode> GetEpisodeBySeries(int seriesId);
         List<Episode> GetEpisodesBySeries(List<int> seriesIds);
@@ -75,6 +78,11 @@ namespace NzbDrone.Core.Tv
             return FindOneByAirDate(seriesId, date, part);
         }
 
+        public bool HasEpisodesOnDate(int seriesId, string date)
+        {
+            return _episodeRepository.Find(seriesId, date).Any();
+        }
+
         public Episode FindByExternalId(string externalId)
         {
             return _episodeRepository.FindByExternalId(externalId);
@@ -96,6 +104,36 @@ namespace NzbDrone.Core.Tv
         }
 
         public Episode FindEpisodeByTitle(int seriesId, int seasonNumber, string releaseTitle)
+        {
+            var matches = GetEpisodeTitleMatches(seriesId, seasonNumber, releaseTitle);
+
+            if (matches.Any())
+            {
+                return matches.First();
+            }
+
+            return null;
+        }
+
+        public Episode FindEpisodeByTitleUnique(int seriesId, int seasonNumber, string releaseTitle)
+        {
+            var matches = GetEpisodeTitleMatches(seriesId, seasonNumber, releaseTitle).ToList();
+            var distinct = matches.Select(e => e.Id).Distinct().ToList();
+
+            if (distinct.Count == 1)
+            {
+                return matches.First();
+            }
+
+            if (distinct.Count > 1)
+            {
+                _logger.Debug("Title '{0}' matched multiple episodes in season {1}. Rejecting to prevent incorrect match.", releaseTitle, seasonNumber);
+            }
+
+            return null;
+        }
+
+        private IEnumerable<Episode> GetEpisodeTitleMatches(int seriesId, int seasonNumber, string releaseTitle)
         {
             // TODO: can replace this search mechanism with something smarter/faster/better
             var normalizedReleaseTitle = Parser.Parser.NormalizeEpisodeTitle(releaseTitle);
@@ -119,18 +157,46 @@ namespace NzbDrone.Core.Tv
                     }
                 });
 
-            var matches = possibleMatches
+            return possibleMatches
                                 .Where(e => e.Episode.Title.Length > 0 && e.Position >= 0)
                                 .OrderBy(e => e.Position)
                                 .ThenByDescending(e => e.Length)
-                                .ToList();
+                                .Select(e => e.Episode);
+        }
 
-            if (matches.Any())
+        public Episode FindEpisodeBySeasonAndToken(int seriesId, int seasonNumber, string episodeToken, string releaseTitle, bool requireUniqueTitle = false)
+        {
+            var episodes = _episodeRepository.GetEpisodes(seriesId, seasonNumber);
+
+            if (!episodeToken.IsNullOrWhiteSpace())
             {
-                return matches.First().Episode;
+                var normalizedToken = Parser.Parser.NormalizeEpisodeTitle(episodeToken);
+
+                if (!normalizedToken.IsNullOrWhiteSpace())
+                {
+                    var tokenRegex = new Regex($@"(?<!\w){Regex.Escape(normalizedToken)}(?!\w)", RegexOptions.IgnoreCase);
+                    var tokenMatches = episodes
+                        .Where(e => e.Title.IsNotNullOrWhiteSpace() &&
+                                    tokenRegex.IsMatch(Parser.Parser.NormalizeEpisodeTitle(e.Title)))
+                        .ToList();
+
+                    if (tokenMatches.Count == 1)
+                    {
+                        _logger.Debug("Matched episode using S/E token '{0}' in season {1}", episodeToken, seasonNumber);
+                        return tokenMatches.First();
+                    }
+
+                    if (tokenMatches.Count > 1)
+                    {
+                        _logger.Debug("S/E token '{0}' matched multiple episodes in season {1}. Rejecting to prevent incorrect match.", episodeToken, seasonNumber);
+                        return null;
+                    }
+                }
             }
 
-            return null;
+            return requireUniqueTitle
+                ? FindEpisodeByTitleUnique(seriesId, seasonNumber, releaseTitle)
+                : FindEpisodeByTitle(seriesId, seasonNumber, releaseTitle);
         }
 
         public List<Episode> EpisodesWithFiles(int seriesId)

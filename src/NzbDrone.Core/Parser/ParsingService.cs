@@ -1,5 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Common.Instrumentation.Extensions;
@@ -22,6 +25,17 @@ namespace NzbDrone.Core.Parser
 
     public class ParsingService : IParsingService
     {
+        private static readonly Regex SiteBracketRegex = new Regex(@"\[[^\]]+\]", RegexOptions.Compiled);
+        private static readonly Regex SiteTokenRegex = new Regex(@"[a-zA-Z0-9.-]+", RegexOptions.Compiled);
+        private static readonly Regex SiteTldRegex = new Regex(@"\.(com|net|org|tv|xxx|io|info|gg)$", RegexOptions.IgnoreCase);
+
+        private static readonly HashSet<string> QualityTokens = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "1080p", "720p", "2160p", "480p", "540p", "4k", "uhd", "hd", "hdtv", "fullhd",
+            "web", "webrip", "webdl", "webdll", "h264", "h265", "hevc", "xvid", "x264x",
+            "bluray", "brrip", "dvd", "dvdr", "dvrip", "camrip", "tvrip", "hdtvx265"
+        };
+
         private readonly IEpisodeService _episodeService;
         private readonly ISeriesService _seriesService;
         private readonly Logger _logger;
@@ -55,6 +69,11 @@ namespace NzbDrone.Core.Parser
             {
                 series = _seriesService.FindByTitle(parsedEpisodeInfo.SeriesTitleInfo.TitleWithoutYear,
                                                     parsedEpisodeInfo.SeriesTitleInfo.Year);
+            }
+
+            if (series == null)
+            {
+                series = FindSeriesBySiteTokens(parsedEpisodeInfo?.SeriesTitleCandidates, title);
             }
 
             return series;
@@ -192,11 +211,61 @@ namespace NzbDrone.Core.Parser
 
         private List<Episode> GetEpisodes(ParsedEpisodeInfo parsedEpisodeInfo, Series series, SearchCriteriaBase searchCriteria)
         {
-            var episodeInfo = GetDailyEpisode(series, parsedEpisodeInfo.AirDate, parsedEpisodeInfo.ReleaseTokens, searchCriteria);
-
-            if (episodeInfo != null)
+            // Primary air date resolved by the title parser
+            if (!parsedEpisodeInfo.AirDate.IsNullOrWhiteSpace())
             {
-                return new List<Episode> { episodeInfo };
+                var episodeInfo = GetDailyEpisode(series, parsedEpisodeInfo.AirDate, parsedEpisodeInfo.ReleaseTokens, searchCriteria);
+
+                if (episodeInfo != null)
+                {
+                    return new List<Episode> { episodeInfo };
+                }
+            }
+
+            // The parsed date may use the wrong day/month ordering (dd.mm vs mm.dd) or the only
+            // date may live inside the release text (e.g. "Jul 14, 2009", "v100700 / 03.06.2011").
+            // Only explore alternative readings when the parsed date definitely has no episode in the
+            // library, otherwise keep the conservative ambiguous-date rejection.
+            if (parsedEpisodeInfo.AirDate.IsNullOrWhiteSpace() ||
+                !_episodeService.HasEpisodesOnDate(series.Id, parsedEpisodeInfo.AirDate))
+            {
+                foreach (var candidateDate in GetInlineAirDateCandidates(parsedEpisodeInfo.ReleaseTitle, parsedEpisodeInfo.AirDate))
+                {
+                    var candidateEpisode = GetDailyEpisode(series, candidateDate, parsedEpisodeInfo.ReleaseTokens, searchCriteria);
+
+                    if (candidateEpisode != null)
+                    {
+                        _logger.Debug("No episode on parsed air date {0}; matched candidate date {1} for release '{2}'", parsedEpisodeInfo.AirDate, candidateDate, parsedEpisodeInfo.ReleaseTokens);
+                        return new List<Episode> { candidateEpisode };
+                    }
+                }
+            }
+
+            // The air date in the release may differ from the one in the library (site vs metadata date).
+            // Fall back to matching by S/E token or by a unique title within the release year's season.
+            if (!parsedEpisodeInfo.AirDate.IsNullOrWhiteSpace() &&
+                parsedEpisodeInfo.AirDate.Length >= 4 &&
+                int.TryParse(parsedEpisodeInfo.AirDate.AsSpan(0, 4), out var airYear) &&
+                airYear > 1900)
+            {
+                var episode = _episodeService.FindEpisodeBySeasonAndToken(series.Id, airYear, parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens, true);
+
+                if (episode != null)
+                {
+                    _logger.Debug("Air date {0} had no episode; matched by title/token in season {1} for release '{2}'", parsedEpisodeInfo.AirDate, airYear, parsedEpisodeInfo.ReleaseTokens);
+                    return new List<Episode> { episode };
+                }
+            }
+            else if (parsedEpisodeInfo.SeasonNumber > 0)
+            {
+                // Site release without a full air date: use the year as the season and match by S/E token or title
+                var episode = _episodeService.FindEpisodeBySeasonAndToken(series.Id, parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
+
+                if (episode != null)
+                {
+                    _logger.Debug("Found episode by season {0} (year) for release '{1}'", parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.ReleaseTokens);
+                    return new List<Episode> { episode };
+                }
             }
 
             // Fallback to external ID lookup if air date matching failed
@@ -212,6 +281,139 @@ namespace NzbDrone.Core.Parser
             }
 
             return new List<Episode>();
+        }
+
+        private static readonly Regex InlineDateFormatRegex = new Regex(
+            @"(?<![0-9])(?<day>0?[1-9]|[12][0-9]|3[01])[./-](?<month>0?[1-9]|1[0-2])[./-](?<year>[0-9]{2,4})(?![0-9])",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        // ISO-style big-endian dates found inside the release text (e.g. "2013-06-05", "2019.12.09").
+        // Their day/month swapped reading is emitted as well, since some metadata stores the date day-first.
+        private static readonly Regex InlineIsoDateRegex = new Regex(
+            @"(?<![0-9])(?<year>(?:19|20)[0-9]{2})[./-](?<month>0?[1-9]|1[0-2])[./-](?<day>0?[1-9]|[12][0-9]|3[01])(?![0-9])",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex InlineMonthNameDateRegex = new Regex(
+            @"(?<month>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?[\s-]+(?<day>\d{1,2}),?[\s-]+(?<year>(?:19|20)\d{2})",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Dictionary<string, int> ShortMonthNames = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "jan", 1 }, { "feb", 2 }, { "mar", 3 }, { "apr", 4 }, { "may", 5 }, { "jun", 6 },
+            { "jul", 7 }, { "aug", 8 }, { "sep", 9 }, { "oct", 10 }, { "nov", 11 }, { "dec", 12 }
+        };
+
+        // Collect yyyy-MM-dd candidates from the release title. Numeric day-first and month-first
+        // readings are both emitted; the caller validates them against the library before use.
+        private static List<string> GetInlineAirDateCandidates(string releaseTitle, string skipDate)
+        {
+            var candidates = new List<string>();
+            var added = new HashSet<string>();
+
+            if (releaseTitle.IsNullOrWhiteSpace())
+            {
+                return candidates;
+            }
+
+            foreach (Match match in InlineDateFormatRegex.Matches(releaseTitle))
+            {
+                var year = ParseYear(match.Groups["year"].Value);
+                if (!year.HasValue)
+                {
+                    continue;
+                }
+
+                var day = int.Parse(match.Groups["day"].Value);
+                var month = int.Parse(match.Groups["month"].Value);
+
+                AddCandidate(TryFormatDate(year.Value, month, day), skipDate, added, candidates);
+                if (day != month)
+                {
+                    AddCandidate(TryFormatDate(year.Value, day, month), skipDate, added, candidates);
+                }
+            }
+
+            foreach (Match match in InlineMonthNameDateRegex.Matches(releaseTitle))
+            {
+                if (!ShortMonthNames.TryGetValue(match.Groups["month"].Value, out var month))
+                {
+                    continue;
+                }
+
+                var year = ParseYear(match.Groups["year"].Value);
+                if (!year.HasValue)
+                {
+                    continue;
+                }
+
+                AddCandidate(TryFormatDate(year.Value, month, int.Parse(match.Groups["day"].Value)), skipDate, added, candidates);
+            }
+
+            foreach (Match match in InlineIsoDateRegex.Matches(releaseTitle))
+            {
+                var year = ParseYear(match.Groups["year"].Value);
+                if (!year.HasValue)
+                {
+                    continue;
+                }
+
+                var month = int.Parse(match.Groups["month"].Value);
+                var day = int.Parse(match.Groups["day"].Value);
+
+                AddCandidate(TryFormatDate(year.Value, month, day), skipDate, added, candidates);
+                if (day != month)
+                {
+                    AddCandidate(TryFormatDate(year.Value, day, month), skipDate, added, candidates);
+                }
+            }
+
+            return candidates;
+        }
+
+        private static string TryFormatDate(int year, int month, int day)
+        {
+            if (month < 1 || month > 12 || day < 1 || day > 31)
+            {
+                return null;
+            }
+
+            try
+            {
+                return new DateTime(year, month, day).ToString(Episode.AIR_DATE_FORMAT);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                // Invalid day/month combination, skip this reading
+                return null;
+            }
+        }
+
+        private static void AddCandidate(string date, string skipDate, HashSet<string> added, List<string> candidates)
+        {
+            if (date.IsNullOrWhiteSpace() || date == skipDate || !added.Add(date))
+            {
+                return;
+            }
+
+            candidates.Add(date);
+        }
+
+        private static int? ParseYear(string value)
+        {
+            if (int.TryParse(value, out var year))
+            {
+                if (year <= 99)
+                {
+                    year = CultureInfo.CurrentCulture.Calendar.ToFourDigitYear(year);
+                }
+
+                if (year >= 1900 && year <= DateTime.Now.AddDays(1).Year)
+                {
+                    return year;
+                }
+            }
+
+            return null;
         }
 
         public ParsedEpisodeInfo ParseSpecialEpisodeTitle(ParsedEpisodeInfo parsedEpisodeInfo, string releaseTitle, int tvdbId, SearchCriteriaBase searchCriteria = null)
@@ -300,6 +502,18 @@ namespace NzbDrone.Core.Parser
 
             var matchType = SeriesMatchType.Unknown;
 
+            // Site releases without a full air date may list multiple domains (e.g. [Network.com / Site.com]).
+            // Prefer the candidate that actually contains a matching episode to avoid resolving the wrong series.
+            if (parsedEpisodeInfo.SeasonNumber > 0 && parsedEpisodeInfo.SeriesTitleCandidates?.Count > 0)
+            {
+                var candidateSeries = FindSiteReleaseSeries(parsedEpisodeInfo);
+
+                if (candidateSeries != null)
+                {
+                    return new FindSeriesResult(candidateSeries, SeriesMatchType.Title);
+                }
+            }
+
             if (hasSeriesTitle)
             {
                 series = _seriesService.FindByTitle(parsedEpisodeInfo.SeriesTitle);
@@ -326,6 +540,16 @@ namespace NzbDrone.Core.Parser
             {
                 series = _seriesService.FindByTitleSlug(parsedEpisodeInfo.SeriesTitle);
                 matchType = SeriesMatchType.Title;
+            }
+
+            if (series == null)
+            {
+                series = FindSeriesBySiteTokens(parsedEpisodeInfo.SeriesTitleCandidates, parsedEpisodeInfo.ReleaseTitle);
+
+                if (series != null)
+                {
+                    matchType = SeriesMatchType.Title;
+                }
             }
 
             if (series == null && tvdbId > 0)
@@ -368,6 +592,109 @@ namespace NzbDrone.Core.Parser
             }
 
             return new FindSeriesResult(series, matchType);
+        }
+
+        private Series FindSiteReleaseSeries(ParsedEpisodeInfo parsedEpisodeInfo)
+        {
+            Series firstResolved = null;
+
+            foreach (var candidate in parsedEpisodeInfo.SeriesTitleCandidates)
+            {
+                var series = _seriesService.FindByTitle(candidate);
+
+                if (series == null)
+                {
+                    continue;
+                }
+
+                firstResolved ??= series;
+
+                // Only trust a candidate if it actually contains the episode we're looking for
+                var episode = _episodeService.FindEpisodeBySeasonAndToken(series.Id, parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
+
+                if (episode != null)
+                {
+                    _logger.Debug("Resolved site release to series '{0}' (id {1}) with a matching episode", series.Title, series.Id);
+                    return series;
+                }
+            }
+
+            if (firstResolved != null)
+            {
+                _logger.Debug("No candidate series contained a matching episode; falling back to first resolved series '{0}' (id {1})", firstResolved.Title, firstResolved.Id);
+            }
+
+            return firstResolved;
+        }
+
+        private Series FindSeriesBySiteTokens(IEnumerable<string> knownCandidates, string releaseTitle)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var candidates = new List<string>();
+
+            if (knownCandidates != null)
+            {
+                candidates.AddRange(knownCandidates.Where(t => t.IsNotNullOrWhiteSpace()));
+            }
+
+            var brackets = SiteBracketRegex.Matches(releaseTitle ?? string.Empty);
+            var bracketCount = 0;
+
+            foreach (Match bracket in brackets)
+            {
+                // Only the leading brackets hold site domains; trailing tag brackets ([2015 г., Solo]) are ignored.
+                if (bracketCount >= 2)
+                {
+                    break;
+                }
+
+                bracketCount++;
+
+                var content = bracket.Value.Trim('[', ']');
+                var tokens = SiteTokenRegex.Matches(content).Cast<Match>().Select(m => m.Value.Trim()).Where(t => !t.IsNullOrWhiteSpace()).ToList();
+
+                if (tokens.Count == 0)
+                {
+                    continue;
+                }
+
+                // A plain word bracket ([Private Castings]) is not site-like; only treat brackets containing
+                // a list separator or at least one domain-like token as sources of site candidates.
+                var isList = content.IndexOfAny(new[] { '/', '|', '&', ',' }) >= 0;
+                var hasDomainToken = tokens.Any(t => t.Contains("."));
+
+                if (!isList && !hasDomainToken)
+                {
+                    continue;
+                }
+
+                candidates.AddRange(tokens);
+            }
+
+            foreach (var token in candidates)
+            {
+                if (!seen.Add(token))
+                {
+                    continue;
+                }
+
+                var siteToken = SiteTldRegex.Replace(token.Trim().ToLowerInvariant(), string.Empty);
+
+                if (siteToken.Length < 4 || QualityTokens.Contains(siteToken) || siteToken.All(char.IsDigit))
+                {
+                    continue;
+                }
+
+                var series = _seriesService.FindByTitle(siteToken);
+
+                if (series != null)
+                {
+                    _logger.Debug("Resolved series '{0}' (id {1}) from site token '{2}' for release '{3}'", series.Title, series.Id, token, releaseTitle);
+                    return series;
+                }
+            }
+
+            return null;
         }
 
         private Episode GetDailyEpisode(Series series, string airDate, string part, SearchCriteriaBase searchCriteria)

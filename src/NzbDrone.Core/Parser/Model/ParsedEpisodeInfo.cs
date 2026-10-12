@@ -17,6 +17,9 @@ namespace NzbDrone.Core.Parser.Model
         public int SeasonPart { get; set; }
         public string ReleaseTokens { get; set; }
         public string ExternalId { get; set; }
+        public int SeasonNumber { get; set; } // Season derived from the year for site releases without a full air date
+        public string EpisodeToken { get; set; } // Explicit Sxx:Eyy token found in the release title
+        public List<string> SeriesTitleCandidates { get; set; } // Candidate series (site domains) for multi-site releases
 
         public ParsedEpisodeInfo()
         {

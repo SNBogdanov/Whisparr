@@ -134,6 +134,13 @@ namespace NzbDrone.Core.Parser
 
                 // Daily episodes that use short month format instead of number
                 new Regex(@"^(?<title>.+?)[-_. ]+(?<airday>[1-2]\d|3[01]|[1-9])(?:th|st|rd)[-_. ](?<shortairmonth>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-_. ](?<airyear>(19|20)\d{2})",
+                    RegexOptions.IgnoreCase | RegexOptions.Compiled),
+
+                // Site title in brackets, no full air date, year-only tag block, optional Sxx:Eyy in the title
+                // [SexMex.xxx] Nicole Zurich (Naughty Little Devil) [2026 г., MILF, Hardcore, 1080p] [733.8 MB]
+                // [FamilySwap.xxx / Nubiles-Porn.com] Emily Jade, Elizabeth Skylar (What Happens When You Ban Halloween - S12:E2) [2026 г., All Sex, 1080p] [2.21 GB]
+                // [DDFBusty.com / DDFProd.com] Angel Wicky:Lingerie Temptations [1080p/06.01.2014 г., Blondes,Big Tits] (tag block may carry a prefix like 1080p/ before the year)
+                new Regex("^\\[(?<sites>[^\\]]+)\\](?<releasetoken>.+?)\\[[ \\w./]*(?<siteyear>(19|20)\\d{2})(?:\\s*\\u0433\\.?)?\\s*(?:,|\\])",
                     RegexOptions.IgnoreCase | RegexOptions.Compiled)
             };
 
@@ -254,6 +261,7 @@ namespace NzbDrone.Core.Parser
                                                                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private static readonly Regex PunctuationRegex = new Regex(@"[^\w\s]", RegexOptions.Compiled);
+        private static readonly Regex SeasonEpisodeTokenRegex = new Regex(@"\b[Ss](?<season>\d{1,3})\s*[:\-]?\s*[Ee](?<episode>\d{1,3})\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex ArticleWordRegex = new Regex(@"^(a|an|the)\s", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex SpecialEpisodeWordRegex = new Regex(@"\b(part|special|edition|christmas)\b\s?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
         private static readonly Regex DuplicateSpacesRegex = new Regex(@"\s{2,}", RegexOptions.Compiled);
@@ -395,50 +403,23 @@ namespace NzbDrone.Core.Parser
                     }
                 }
 
-                foreach (var regex in ReportTitleRegex)
+                var result = TryParseReportTitle(simpleTitle, releaseTitle, title);
+
+                if (result != null)
                 {
-                    var match = regex.Matches(simpleTitle);
+                    return result;
+                }
 
-                    if (match.Count != 0)
+                // Fallback: try release-title normalizations (mirrors the external helper's retries) only
+                // after the normal parse fails, so previously-parsing titles are never affected.
+                foreach (var fallbackTitle in GetFallbackTitles(simpleTitle))
+                {
+                    result = TryParseReportTitle(fallbackTitle, releaseTitle, title);
+
+                    if (result != null)
                     {
-                        Logger.Trace(regex);
-                        try
-                        {
-                            var result = ParseMatchCollection(match, simpleTitle);
-
-                            if (result != null)
-                            {
-                                result.ReleaseTitle = releaseTitle;
-                                result.Languages = LanguageParser.ParseLanguages(releaseTitle);
-                                Logger.Debug("Languages parsed: {0}", string.Join(", ", result.Languages));
-
-                                result.Quality = QualityParser.ParseQuality(title);
-                                Logger.Debug("Quality parsed: {0}", result.Quality);
-
-                                result.ReleaseGroup = ParseReleaseGroup(releaseTitle);
-
-                                var subGroup = GetSubGroup(match);
-                                if (!subGroup.IsNullOrWhiteSpace())
-                                {
-                                    result.ReleaseGroup = subGroup;
-                                }
-
-                                Logger.Debug("Release Group parsed: {0}", result.ReleaseGroup);
-
-                                result.ReleaseHash = GetReleaseHash(match);
-                                if (!result.ReleaseHash.IsNullOrWhiteSpace())
-                                {
-                                    Logger.Debug("Release Hash parsed: {0}", result.ReleaseHash);
-                                }
-
-                                return result;
-                            }
-                        }
-                        catch (InvalidDateException ex)
-                        {
-                            Logger.Debug(ex, ex.Message);
-                            break;
-                        }
+                        Logger.Debug("Parsed '{0}' using fallback normalization '{1}'", title, fallbackTitle);
+                        return result;
                     }
                 }
             }
@@ -452,6 +433,89 @@ namespace NzbDrone.Core.Parser
 
             Logger.Debug("Unable to parse {0}", title);
             return null;
+        }
+
+        private static ParsedEpisodeInfo TryParseReportTitle(string simpleTitle, string releaseTitle, string originalTitle)
+        {
+            foreach (var regex in ReportTitleRegex)
+            {
+                var match = regex.Matches(simpleTitle);
+
+                if (match.Count != 0)
+                {
+                    Logger.Trace(regex);
+                    try
+                    {
+                        var result = ParseMatchCollection(match, simpleTitle);
+
+                        if (result != null)
+                        {
+                            result.ReleaseTitle = releaseTitle;
+                            result.Languages = LanguageParser.ParseLanguages(releaseTitle);
+                            Logger.Debug("Languages parsed: {0}", string.Join(", ", result.Languages));
+
+                            result.Quality = QualityParser.ParseQuality(originalTitle);
+                            Logger.Debug("Quality parsed: {0}", result.Quality);
+
+                            result.ReleaseGroup = ParseReleaseGroup(releaseTitle);
+
+                            var subGroup = GetSubGroup(match);
+                            if (!subGroup.IsNullOrWhiteSpace())
+                            {
+                                result.ReleaseGroup = subGroup;
+                            }
+
+                            Logger.Debug("Release Group parsed: {0}", result.ReleaseGroup);
+
+                            result.ReleaseHash = GetReleaseHash(match);
+                            if (!result.ReleaseHash.IsNullOrWhiteSpace())
+                            {
+                                Logger.Debug("Release Hash parsed: {0}", result.ReleaseHash);
+                            }
+
+                            return result;
+                        }
+                    }
+                    catch (InvalidDateException ex)
+                    {
+                        Logger.Debug(ex, ex.Message);
+                        break;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static IEnumerable<string> GetFallbackTitles(string baseTitle)
+        {
+            var title = baseTitle;
+
+            var steps = new Func<string, string>[]
+            {
+                t => t.Replace("&amp;", "&").Replace("&#039;", "'").Replace("&#39;", "'"),
+                t => Regex.Replace(t, @"\bRelease\s*Date:?\s*", string.Empty, RegexOptions.IgnoreCase),
+                t => Regex.Replace(t, @"^[^\[]*(\[)", "$1"),
+                t => Regex.Replace(t, @"^\[(1080p|720p)\]\s*", string.Empty, RegexOptions.IgnoreCase),
+                t => Regex.Replace(t, @"(\d{4})\.(\d{2})\.(\d{2})", "$1-$2-$3"),
+                t => Regex.Replace(t, @"(?<!\d)(\d{2})[/\.-](\d{2})[/\.-](\d{4})(?!\d)", "${3}-${2}-${1}"),
+                t => Regex.Replace(t, @"([^\d])(\d{2})[/\.-](\d{2})[/\.-](\d{2})([^\d])", "${1}20${4}-${3}-${2}${5}"),
+                t => Regex.Replace(t, @"(\[[^\]]*\]) *(\d{4}-\d{2}-\d{2})", "$1 - $2"),
+                t => Regex.Replace(t, @"[\(\)]", string.Empty),
+            };
+
+            foreach (var step in steps)
+            {
+                var next = step(title);
+
+                if (next == title)
+                {
+                    continue;
+                }
+
+                title = next;
+                yield return title;
+            }
         }
 
         public static string ParseSeriesName(string title)
@@ -719,6 +783,78 @@ namespace NzbDrone.Core.Parser
             return title;
         }
 
+        private static readonly string[] SiteTlds = new[]
+            {
+                "com", "net", "org", "info", "biz", "me", "co", "cc", "tv", "xxx", "xyz", "ru",
+                "io", "site", "online", "to", "mobi", "name", "eu", "de", "fr", "uk", "nl", "se",
+                "pl", "it", "es", "gq", "ml", "ga", "cf", "cl", "club", "tube", "porn", "sex"
+            };
+
+        private static bool IsSiteLikeTitle(string title)
+        {
+            var trimmed = title.Trim().Trim('[', ']');
+
+            if (trimmed.IsNullOrWhiteSpace() || trimmed.Contains('/') || trimmed.Contains(' '))
+            {
+                return false;
+            }
+
+            var lastDot = trimmed.LastIndexOf('.');
+
+            if (lastDot <= 0 || lastDot == trimmed.Length - 1)
+            {
+                return false;
+            }
+
+            // The label before the TLD must be a plausible domain label (letters/digits/hyphens)
+            var label = trimmed.Substring(0, lastDot);
+
+            if (!Regex.IsMatch(label, @"^[a-z0-9-]{1,64}$", RegexOptions.IgnoreCase))
+            {
+                return false;
+            }
+
+            return SiteTlds.Contains(trimmed.Substring(lastDot + 1), StringComparer.OrdinalIgnoreCase);
+        }
+
+        private static List<string> ParseSiteCandidates(string sites)
+        {
+            var candidates = new List<string>();
+
+            if (sites.IsNullOrWhiteSpace())
+            {
+                return candidates;
+            }
+
+            foreach (var raw in sites.Split('/'))
+            {
+                var part = raw.Trim();
+
+                if (part.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+
+                part = Regex.Replace(part, @"^www\.", string.Empty, RegexOptions.IgnoreCase);
+
+                var dot = part.IndexOf('.');
+
+                if (dot > 0)
+                {
+                    part = part.Substring(0, dot);
+                }
+
+                part = part.Trim().Trim('_', '-', ' ');
+
+                if (!part.IsNullOrWhiteSpace() && !candidates.Contains(part, StringComparer.OrdinalIgnoreCase))
+                {
+                    candidates.Add(part);
+                }
+            }
+
+            return candidates;
+        }
+
         private static SeriesTitleInfo GetSeriesTitleInfo(string title)
         {
             var seriesTitleInfo = new SeriesTitleInfo();
@@ -794,6 +930,21 @@ namespace NzbDrone.Core.Parser
                         seasons.Add(parsedSeason);
 
                         lastSeasonEpisodeStringIndex = Math.Max(lastSeasonEpisodeStringIndex, seasonCapture.EndIndex());
+                    }
+                }
+
+                // Site releases without a full air date use the year as the season (e.g. [2026 г., ...])
+                if (matchCollection[0].Groups["siteyear"].Success &&
+                    int.TryParse(matchCollection[0].Groups["siteyear"].Value, out var siteYear))
+                {
+                    result.SeasonNumber = siteYear;
+
+                    var siteCandidates = ParseSiteCandidates(matchCollection[0].Groups["sites"].Value);
+
+                    if (siteCandidates.Count > 0)
+                    {
+                        result.SeriesTitle = siteCandidates[0];
+                        result.SeriesTitleCandidates = siteCandidates;
                     }
                 }
             }
@@ -897,7 +1048,48 @@ namespace NzbDrone.Core.Parser
                 }
             }
 
-            result.SeriesTitle = seriesName;
+            // Extract an explicit Sxx:Eyy token (used to disambiguate episodes within a year-based season)
+            if (result.SeasonNumber > 0 && !result.ReleaseTokens.IsNullOrWhiteSpace())
+            {
+                var tokenMatch = SeasonEpisodeTokenRegex.Match(result.ReleaseTokens);
+
+                if (tokenMatch.Success)
+                {
+                    result.EpisodeToken = tokenMatch.Value;
+                }
+            }
+
+            if (result.SeriesTitle.IsNullOrWhiteSpace())
+            {
+                var titleGroup = matchCollection[0].Groups["title"].Value;
+
+                // Daily/site titles that start with a bracketed domain ([SexMex.xxx] 2026-10-01 - ...)
+                // or whose title group is a bare domain (SexMex.xxx 2026-10-01 - ...) lose the series name
+                // once the brackets/domain are stripped, so derive site candidates instead.
+                // Every space/slash-separated part must look like a site domain to avoid treating
+                // ordinary dotted series names (A.Late.Talk.Show) as sites.
+                var siteParts = titleGroup.Trim('[', ']').Split(new[] { ' ', '/', '&', '|' }, StringSplitOptions.RemoveEmptyEntries);
+
+                if (siteParts.Length > 0 && siteParts.All(v => IsSiteLikeTitle(v)))
+                {
+                    var siteCandidates = ParseSiteCandidates(titleGroup.Trim('[', ']'));
+
+                    if (siteCandidates.Count > 0)
+                    {
+                        result.SeriesTitle = siteCandidates[0];
+                        result.SeriesTitleCandidates = siteCandidates;
+                    }
+                    else
+                    {
+                        result.SeriesTitle = seriesName;
+                    }
+                }
+                else
+                {
+                    result.SeriesTitle = seriesName;
+                }
+            }
+
             result.SeriesTitleInfo = GetSeriesTitleInfo(result.SeriesTitle);
 
             Logger.Debug("Episode Parsed. {0}", result);
