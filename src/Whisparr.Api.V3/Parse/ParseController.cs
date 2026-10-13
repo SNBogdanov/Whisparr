@@ -41,9 +41,12 @@ namespace Whisparr.Api.V3.Parse
 
             if (parsedEpisodeInfo == null)
             {
+                // The title doesn't parse as an episode, but it may still belong to a series
+                // (e.g. bracketed site domains in compilation/pack releases), so expose it.
                 return new ParseResource
                 {
-                    Title = title
+                    Title = title,
+                    Series = _parsingService.GetSeries(title)?.ToResource()
                 };
             }
 

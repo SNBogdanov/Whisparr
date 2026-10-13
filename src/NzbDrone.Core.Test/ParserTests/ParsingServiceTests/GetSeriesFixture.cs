@@ -61,6 +61,18 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
         }
 
         [Test]
+        public void should_resolve_series_from_unparseable_title()
+        {
+            var series = new Series { TvdbId = 400 };
+            Mocker.GetMock<ISeriesService>().Setup(v => v.FindByTitle("handsonhardcore")).Returns(series);
+
+            // Compilation/pack releases don't parse as an episode, but their bracketed site still maps to a series
+            var result = Subject.GetSeries("[HandsOnHardCore.com / DDFProd.com] (7556/7579/7582/7597) [720p]");
+
+            result.Should().Be(series);
+        }
+
+        [Test]
         public void should_fallback_to_sibling_site_domain_when_series_title_lookup_fails()
         {
             var series = new Series { TvdbId = 200 };

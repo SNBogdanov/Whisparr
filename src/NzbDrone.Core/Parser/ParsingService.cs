@@ -55,7 +55,14 @@ namespace NzbDrone.Core.Parser
 
             if (parsedEpisodeInfo == null)
             {
-                return _seriesService.FindByTitle(title);
+                var matchedSeries = _seriesService.FindByTitle(title);
+
+                if (matchedSeries == null)
+                {
+                    matchedSeries = FindSeriesBySiteTokens(null, title);
+                }
+
+                return matchedSeries;
             }
 
             var series = _seriesService.FindByTitle(parsedEpisodeInfo.SeriesTitle);
@@ -661,7 +668,7 @@ namespace NzbDrone.Core.Parser
                 // A plain word bracket ([Private Castings]) is not site-like; only treat brackets containing
                 // a list separator or at least one domain-like token as sources of site candidates.
                 var isList = content.IndexOfAny(new[] { '/', '|', '&', ',' }) >= 0;
-                var hasDomainToken = tokens.Any(t => t.Contains("."));
+                var hasDomainToken = tokens.Any(t => t.Contains('.'));
 
                 if (!isList && !hasDomainToken)
                 {
