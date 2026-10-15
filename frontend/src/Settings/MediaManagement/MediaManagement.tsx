@@ -1,5 +1,6 @@
-﻿import React, { useCallback, useEffect } from 'react';
+﻿import React, { useCallback, useEffect, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { createSelector } from 'reselect';
 import AppState from 'App/State/AppState';
 import Alert from 'Components/Alert';
 import FieldSet from 'Components/FieldSet';
@@ -18,6 +19,7 @@ import SettingsToolbar from 'Settings/SettingsToolbar';
 import { clearPendingChanges } from 'Store/Actions/baseActions';
 import {
   fetchMediaManagementSettings,
+  fetchQualityProfileSchema,
   saveMediaManagementSettings,
   saveNamingSettings,
   setMediaManagementSettingsValue,
@@ -26,6 +28,7 @@ import createSettingsSectionSelector from 'Store/Selectors/createSettingsSection
 import { useIsWindows } from 'System/Status/useSystemStatus';
 import { InputChanged } from 'typings/inputs';
 import isEmpty from 'Utilities/Object/isEmpty';
+import getQualities from 'Utilities/Quality/getQualities';
 import translate from 'Utilities/String/translate';
 import NamingConnector from './Naming/NamingConnector';
 import AddRootFolder from './RootFolder/AddRootFolder';
@@ -116,6 +119,11 @@ const fileDateOptions: EnhancedSelectInputValue<string>[] = [
   },
 ];
 
+const selectQualitySchemaItems = createSelector(
+  (state: AppState) => state.settings.qualityProfiles,
+  (qualityProfiles) => getQualities(qualityProfiles.schema.items)
+);
+
 function MediaManagement() {
   const dispatch = useDispatch();
   const showAdvancedSettings = useShowAdvancedSettings();
@@ -123,6 +131,7 @@ function MediaManagement() {
     useSelector((state: AppState) => state.settings.naming.pendingChanges)
   );
   const isWindows = useIsWindows();
+  const qualitySchemaItems = useSelector(selectQualitySchemaItems);
   const {
     isFetching,
     isPopulated,
@@ -134,6 +143,23 @@ function MediaManagement() {
     validationErrors,
     validationWarnings,
   } = useSelector(createSettingsSectionSelector(SECTION));
+
+  const defaultQualityOptions = useMemo(() => {
+    return [
+      {
+        key: -1,
+        get value() {
+          return translate('UseFileExtension');
+        },
+      },
+      ...qualitySchemaItems.map(
+        ({ id, name }): EnhancedSelectInputValue<number> => ({
+          key: id,
+          value: name,
+        })
+      ),
+    ] as EnhancedSelectInputValue<number>[];
+  }, [qualitySchemaItems]);
 
   const handleSavePress = useCallback(() => {
     dispatch(saveMediaManagementSettings());
@@ -150,6 +176,7 @@ function MediaManagement() {
 
   useEffect(() => {
     dispatch(fetchMediaManagementSettings());
+    dispatch(fetchQualityProfileSchema());
 
     return () => {
       dispatch(clearPendingChanges({ section: `settings.${SECTION}` }));
@@ -239,6 +266,23 @@ function MediaManagement() {
                     values={episodeTitleRequiredOptions}
                     onChange={handleInputChange}
                     {...settings.episodeTitleRequired}
+                  />
+                </FormGroup>
+
+                <FormGroup
+                  advancedSettings={showAdvancedSettings}
+                  isAdvanced={true}
+                  size={sizes.SMALL}
+                >
+                  <FormLabel>{translate('DefaultQuality')}</FormLabel>
+
+                  <FormInputGroup
+                    type={inputTypes.SELECT}
+                    name="defaultQuality"
+                    helpText={translate('DefaultQualityHelpText')}
+                    values={defaultQualityOptions}
+                    onChange={handleInputChange}
+                    {...settings.defaultQuality}
                   />
                 </FormGroup>
 

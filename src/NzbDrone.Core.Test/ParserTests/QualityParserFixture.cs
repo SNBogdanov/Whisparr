@@ -492,6 +492,25 @@ namespace NzbDrone.Core.Test.ParserTests
             result.ResolutionDetectionSource.Should().Be(QualityDetectionSource.Extension);
         }
 
+        [TestCase("Series.Title.S01E02.Chained.Heat.mkv")]
+        [TestCase("Series - S01E01 - Title.avi")]
+        [TestCase("Series.Title.9x18.sunshine_days.avi")]
+        public void should_use_default_quality_instead_of_extension_when_configured(string title)
+        {
+            QualityParser.DefaultQuality = Quality.Bluray1080p;
+
+            try
+            {
+                var result = QualityParser.ParseQuality(title);
+
+                result.Quality.Should().Be(Quality.Bluray1080p);
+            }
+            finally
+            {
+                QualityParser.DefaultQuality = null;
+            }
+        }
+
         [TestCase("Series.Title.S01E02.Chained.Heat.1080p.mkv")]
         [TestCase("Series - S01E01 - Title.720p.avi")]
         public void should_parse_resolution_from_name_and_source_from_extension(string title)

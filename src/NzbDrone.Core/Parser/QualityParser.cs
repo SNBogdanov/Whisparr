@@ -66,6 +66,10 @@ namespace NzbDrone.Core.Parser
 
         private static readonly Regex RemuxRegex = new(@"(?:[_. ]|\d{4}p-|\bHybrid-)(?<remux>(?:(BD|UHD)[-_. ]?)?Remux)\b|(?<remux>(?:(BD|UHD)[-_. ]?)?Remux[_. ]\d{4}p)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+        // Quality to use when a release/file name contains no parseable quality.
+        // Null means fall back to the quality implied by the file extension.
+        public static Quality DefaultQuality { get; set; }
+
         public static QualityModel ParseQuality(string name)
         {
             Logger.Debug("Trying to parse quality for '{0}'", name);
@@ -82,16 +86,25 @@ namespace NzbDrone.Core.Parser
             // Based on extension
             if (result.Quality == Quality.Unknown && !name.ContainsInvalidPathChars())
             {
-                try
+                if (DefaultQuality != null)
                 {
-                    result.Quality = MediaFileExtensions.GetQualityForExtension(Path.GetExtension(name));
-                    result.SourceDetectionSource = QualityDetectionSource.Extension;
-                    result.ResolutionDetectionSource = QualityDetectionSource.Extension;
+                    result.Quality = DefaultQuality;
+                    result.SourceDetectionSource = QualityDetectionSource.Unknown;
+                    result.ResolutionDetectionSource = QualityDetectionSource.Unknown;
                 }
-                catch (ArgumentException)
+                else
                 {
-                    // Swallow exception for cases where string contains illegal
-                    // path characters.
+                    try
+                    {
+                        result.Quality = MediaFileExtensions.GetQualityForExtension(Path.GetExtension(name));
+                        result.SourceDetectionSource = QualityDetectionSource.Extension;
+                        result.ResolutionDetectionSource = QualityDetectionSource.Extension;
+                    }
+                    catch (ArgumentException)
+                    {
+                        // Swallow exception for cases where string contains illegal
+                        // path characters.
+                    }
                 }
             }
 

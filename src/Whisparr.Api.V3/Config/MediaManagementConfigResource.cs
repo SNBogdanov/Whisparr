@@ -22,6 +22,7 @@ namespace Whisparr.Api.V3.Config
         public string ChownGroup { get; set; }
 
         public EpisodeTitleRequiredType EpisodeTitleRequired { get; set; }
+        public int DefaultQuality { get; set; }
         public bool SkipFreeSpaceCheckWhenGrabbing { get; set; }
         public bool SkipFreeSpaceCheckWhenImporting { get; set; }
         public int MinimumFreeSpaceWhenImporting { get; set; }
@@ -54,6 +55,7 @@ namespace Whisparr.Api.V3.Config
                 ChownGroup = model.ChownGroup,
 
                 EpisodeTitleRequired = model.EpisodeTitleRequired,
+                DefaultQuality = model.DefaultQuality,
                 SkipFreeSpaceCheckWhenImporting = model.SkipFreeSpaceCheckWhenImporting,
                 SkipFreeSpaceCheckWhenGrabbing = model.SkipFreeSpaceCheckWhenGrabbing,
                 MinimumFreeSpaceWhenImporting = model.MinimumFreeSpaceWhenImporting,

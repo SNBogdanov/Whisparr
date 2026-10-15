@@ -11,6 +11,7 @@ export default interface MediaManagement {
   chmodFolder: string;
   chownGroup: string;
   episodeTitleRequired: string;
+  defaultQuality: number;
   skipFreeSpaceCheckWhenImporting: boolean;
   skipFreeSpaceCheckWhenGrabbing: boolean;
   minimumFreeSpaceWhenImporting: number;

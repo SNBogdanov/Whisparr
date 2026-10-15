@@ -267,6 +267,13 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("EpisodeTitleRequired", value); }
         }
 
+        public int DefaultQuality
+        {
+            get { return GetValueInt("DefaultQuality", -1); }
+
+            set { SetValue("DefaultQuality", value); }
+        }
+
         public string UserRejectedExtensions
         {
             get { return GetValue("UserRejectedExtensions", string.Empty); }
