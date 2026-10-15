@@ -225,7 +225,7 @@ namespace NzbDrone.Core.Parser
                                                                 string.Empty,
                                                                 RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        private static readonly Regex SixDigitAirDateRegex = new Regex(@"(?<=[_.-])(?<airdate>(?<!\d)(?<airyear>[1-9]\d{1})(?<airmonth>[0-1][0-9])(?<airday>[0-3][0-9]))(?=[_.-])",
+        private static readonly Regex SixDigitAirDateRegex = new Regex(@"(?<=^|[\s_.-])(?<airdate>(?<airyear>[1-9]\d{1})(?<airmonth>[0-1][0-9])(?<airday>[0-3][0-9]))(?=$|[\s_.-])",
                                                                         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         private static readonly RegexReplace CleanReleaseGroupRegex = new RegexReplace(@"^(.*?[-._ ](S\d+E\d+)[-._ ])|(-(RP|1|NZBGeek|\[N-Z-B\]|Obfuscated|Scrambled|sample|Pre|postbot|xpost|Rakuv[a-z0-9]*|WhiteRev|BUYMORE|AsRequested|AlternativeToRequested|GEROV|Z0iDS3N|Chamele0n|4P|4Planet|AlteZachen|RePACKPOST))+$",
@@ -395,7 +395,8 @@ namespace NzbDrone.Core.Parser
                     var airMonth = sixDigitAirDateMatch.Groups["airmonth"].Value;
                     var airDay = sixDigitAirDateMatch.Groups["airday"].Value;
 
-                    if (airMonth != "00" || airDay != "00")
+                    if (int.TryParse(airMonth, out var monthValue) && int.TryParse(airDay, out var dayValue) &&
+                        monthValue >= 1 && monthValue <= 12 && dayValue >= 1 && dayValue <= 31)
                     {
                         var fixedDate = string.Format("20{0}.{1}.{2}", airYear, airMonth, airDay);
 

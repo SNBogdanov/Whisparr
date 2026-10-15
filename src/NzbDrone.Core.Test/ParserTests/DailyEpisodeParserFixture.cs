@@ -21,6 +21,7 @@ namespace NzbDrone.Core.Test.ParserTests
         [TestCase("Series Title - 2013-10-30 - Episode Title (1) [HDTV-720p]", "Series Title", 2013, 10, 30)]
         [TestCase("A.Late.Talk.Show.140722.720p.HDTV.x264-YesTV", "A Late Talk Show", 2014, 07, 22)]
         [TestCase("A_Late_Talk_Show_140722_720p_HDTV_x264-YesTV", "A Late Talk Show", 2014, 07, 22)]
+        [TestCase("ATKPremium 141231_jen144CLP_309215001_hd.mp4", "ATKPremium", 2014, 12, 31)]
 
         // [TestCase("Corrie.07.01.15", "Corrie", 2015, 1, 7)]
         [TestCase("The Show Series 2015 02 09 WEBRIP s01e13", "The Show Series", 2015, 2, 9)]
