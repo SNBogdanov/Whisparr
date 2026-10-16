@@ -21,6 +21,7 @@ namespace NzbDrone.Core.Tv
         Episode FindEpisodeByTitle(int seriesId, int seasonNumber, string releaseTitle);
         Episode FindEpisodeByTitleUnique(int seriesId, int seasonNumber, string releaseTitle);
         Episode FindEpisodeBySeasonAndToken(int seriesId, int seasonNumber, string episodeToken, string releaseTitle, bool requireUniqueTitle = false);
+        Episode FindEpisodeByToken(int seriesId, string episodeToken);
         Episode FindEpisode(int seriesId, string date, string part);
         bool HasEpisodesOnDate(int seriesId, string date);
         Episode FindByExternalId(string externalId);
@@ -197,6 +198,35 @@ namespace NzbDrone.Core.Tv
             return requireUniqueTitle
                 ? FindEpisodeByTitleUnique(seriesId, seasonNumber, releaseTitle)
                 : FindEpisodeByTitle(seriesId, seasonNumber, releaseTitle);
+        }
+
+        public Episode FindEpisodeByToken(int seriesId, string episodeToken)
+        {
+            var normalizedToken = Parser.Parser.NormalizeEpisodeTitle(episodeToken);
+
+            if (normalizedToken.IsNullOrWhiteSpace())
+            {
+                return null;
+            }
+
+            var tokenRegex = new Regex($@"(?<!\w){Regex.Escape(normalizedToken)}(?!\w)", RegexOptions.IgnoreCase);
+            var matches = GetEpisodeBySeries(seriesId)
+                .Where(e => e.Title.IsNotNullOrWhiteSpace() &&
+                            tokenRegex.IsMatch(Parser.Parser.NormalizeEpisodeTitle(e.Title)))
+                .ToList();
+
+            if (matches.Count == 1)
+            {
+                _logger.Debug("Matched episode using scene token '{0}'", episodeToken);
+                return matches.First();
+            }
+
+            if (matches.Count > 1)
+            {
+                _logger.Debug("Scene token '{0}' matched multiple episodes. Rejecting to prevent incorrect match.", episodeToken);
+            }
+
+            return null;
         }
 
         public List<Episode> EpisodesWithFiles(int seriesId)

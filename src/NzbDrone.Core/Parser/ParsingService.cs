@@ -274,6 +274,18 @@ namespace NzbDrone.Core.Parser
                     return new List<Episode> { episode };
                 }
             }
+            else if (!parsedEpisodeInfo.EpisodeToken.IsNullOrWhiteSpace())
+            {
+                // Site release with a bare scene number (E1178) and no air date or season:
+                // match the token against episode titles across the whole series.
+                var episode = _episodeService.FindEpisodeByToken(series.Id, parsedEpisodeInfo.EpisodeToken);
+
+                if (episode != null)
+                {
+                    _logger.Debug("Found episode by scene token {0} for release '{1}'", parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
+                    return new List<Episode> { episode };
+                }
+            }
 
             // Fallback to external ID lookup if air date matching failed
             if (!parsedEpisodeInfo.ExternalId.IsNullOrWhiteSpace())

@@ -141,6 +141,11 @@ namespace NzbDrone.Core.Parser
                 // [FamilySwap.xxx / Nubiles-Porn.com] Emily Jade, Elizabeth Skylar (What Happens When You Ban Halloween - S12:E2) [2026 г., All Sex, 1080p] [2.21 GB]
                 // [DDFBusty.com / DDFProd.com] Angel Wicky:Lingerie Temptations [1080p/06.01.2014 г., Blondes,Big Tits] (tag block may carry a prefix like 1080p/ before the year)
                 new Regex("^\\[(?<sites>[^\\]]+)\\](?<releasetoken>.+?)\\[[ \\w./]*(?<siteyear>(19|20)\\d{2})(?:\\s*\\u0433\\.?)?\\s*(?:,|\\])",
+                    RegexOptions.IgnoreCase | RegexOptions.Compiled),
+
+                // Site release with a bare episode/scene number and no air date
+                // PornFidelity.E1178.Channy.Crossfire.XXX.1080p.HEVC.x265.PRT
+                new Regex(@"^(?<title>.+?)[-_. ]+(?<episodetoken>[Ee](?<episode>\d{2,4}))(?:[-_. ]|$)",
                     RegexOptions.IgnoreCase | RegexOptions.Compiled)
             };
 
@@ -947,6 +952,15 @@ namespace NzbDrone.Core.Parser
                         result.SeriesTitle = siteCandidates[0];
                         result.SeriesTitleCandidates = siteCandidates;
                     }
+                }
+
+                // Site release with a bare scene number (E1178). Keep it as the episode token so
+                // resolution can match it against episode titles when there is no air date.
+                var sceneToken = matchCollection[0].Groups["episodetoken"];
+
+                if (sceneToken.Success && result.EpisodeToken.IsNullOrWhiteSpace())
+                {
+                    result.EpisodeToken = sceneToken.Value;
                 }
             }
             else

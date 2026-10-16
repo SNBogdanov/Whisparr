@@ -22,8 +22,7 @@ namespace NzbDrone.Core.Test.ParserTests
         // [TestCase("Series Time 2013 720p HDTV x264 CRON", "seriestime")]
         [TestCase("Series Title 0", "seriestitle0")]
         [TestCase("Series of the Day", "seriesday")]
-        [TestCase("Series of the Day 2", "seriesday2")]
-        [TestCase("[ www.Torrenting.com ] - Series.23.01.23.720p.HDTV.X264-DIMENSION", "series")]
+        [TestCase("Series of the Day 2", "seriesday2")]        [TestCase("[ www.Torrenting.com ] - Series.23.01.23.720p.HDTV.X264-DIMENSION", "series")]
         [TestCase("www.Torrenting.com - Series.23.01.23.720p.HDTV.X264-DIMENSION", "series")]
         [TestCase("Series 2016-01-15 HDTV x264-2HD [eztv]-[rarbg.com]", "series")]
 
@@ -168,6 +167,16 @@ namespace NzbDrone.Core.Test.ParserTests
         {
             var result = Parser.Parser.ParseExternalId(title);
             result.Should().Be(expectedExternalId);
+        }
+
+        [TestCase("PornFidelity.E1178.Channy.Crossfire.XXX.1080p.HEVC.x265.PRT", "PornFidelity", "E1178")]
+        [TestCase("Show.E02.1080p.WEB-DL.mkv", "Show", "E02")]
+        public void should_parse_scene_episode_token(string postTitle, string seriesTitle, string episodeToken)
+        {
+            var result = Parser.Parser.ParseTitle(postTitle);
+            result.Should().NotBeNull();
+            result.SeriesTitle.Should().Be(seriesTitle);
+            result.EpisodeToken.Should().Be(episodeToken);
         }
     }
 }

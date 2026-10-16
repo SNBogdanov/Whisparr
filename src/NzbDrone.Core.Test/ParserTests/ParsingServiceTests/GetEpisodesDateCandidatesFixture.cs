@@ -172,5 +172,28 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
             Mocker.GetMock<IEpisodeService>()
                   .Verify(v => v.FindEpisode(_series.Id, "2017-12-15", It.IsAny<string>()), Times.Once());
         }
+
+        [Test]
+        public void should_match_episode_by_scene_token_when_no_air_date_or_season()
+        {
+            Mocker.GetMock<IEpisodeService>()
+                  .Setup(s => s.FindEpisodeByToken(_series.Id, "E1178"))
+                  .Returns(_episode);
+
+            var parsedInfo = new ParsedEpisodeInfo
+            {
+                ReleaseTitle = "PornFidelity.E1178.Channy.Crossfire.XXX.1080p.HEVC.x265.PRT",
+                EpisodeToken = "E1178",
+                ReleaseTokens = ".Channy.Crossfire.XXX.1080p.HEVC.x265.PRT"
+            };
+
+            var result = Subject.Map(parsedInfo, _series);
+
+            result.Series.Should().Be(_series);
+            result.Episodes.Should().ContainSingle(e => e.Id == _episode.Id);
+
+            Mocker.GetMock<IEpisodeService>()
+                  .Verify(v => v.FindEpisodeByToken(_series.Id, "E1178"), Times.Once());
+        }
     }
 }
