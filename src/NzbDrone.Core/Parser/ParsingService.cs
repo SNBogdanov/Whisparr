@@ -15,6 +15,7 @@ namespace NzbDrone.Core.Parser
     public interface IParsingService
     {
         Series GetSeries(string title);
+        Series GetSeries(string title, bool allowInexact);
         RemoteEpisode Map(ParsedEpisodeInfo parsedEpisodeInfo, int tvdbId, SearchCriteriaBase searchCriteria = null);
         RemoteEpisode Map(ParsedEpisodeInfo parsedEpisodeInfo, Series series);
         RemoteEpisode Map(ParsedEpisodeInfo parsedEpisodeInfo, int seriesId, IEnumerable<int> episodeIds);
@@ -51,6 +52,11 @@ namespace NzbDrone.Core.Parser
 
         public Series GetSeries(string title)
         {
+            return GetSeries(title, false);
+        }
+
+        public Series GetSeries(string title, bool allowInexact)
+        {
             var parsedEpisodeInfo = Parser.ParseTitle(title);
 
             if (parsedEpisodeInfo == null)
@@ -60,6 +66,11 @@ namespace NzbDrone.Core.Parser
                 if (matchedSeries == null)
                 {
                     matchedSeries = FindSeriesBySiteTokens(null, title);
+                }
+
+                if (matchedSeries == null && allowInexact)
+                {
+                    matchedSeries = _seriesService.FindByTitleInexact(title);
                 }
 
                 return matchedSeries;
@@ -75,12 +86,17 @@ namespace NzbDrone.Core.Parser
             if (series == null)
             {
                 series = _seriesService.FindByTitle(parsedEpisodeInfo.SeriesTitleInfo.TitleWithoutYear,
-                                                    parsedEpisodeInfo.SeriesTitleInfo.Year);
+                                                   parsedEpisodeInfo.SeriesTitleInfo.Year);
             }
 
             if (series == null)
             {
                 series = FindSeriesBySiteTokens(parsedEpisodeInfo?.SeriesTitleCandidates, title);
+            }
+
+            if (series == null && allowInexact)
+            {
+                series = _seriesService.FindByTitleInexact(title);
             }
 
             return series;
@@ -218,6 +234,40 @@ namespace NzbDrone.Core.Parser
 
         private List<Episode> GetEpisodes(ParsedEpisodeInfo parsedEpisodeInfo, Series series, SearchCriteriaBase searchCriteria)
         {
+            if (parsedEpisodeInfo.IsCollection)
+            {
+                if (parsedEpisodeInfo.SceneIds != null && parsedEpisodeInfo.SceneIds.Any())
+                {
+                    var collectionEpisodes = new List<Episode>();
+                    var collectionYears = GetSeasonYears(parsedEpisodeInfo);
+
+                    foreach (var sceneId in parsedEpisodeInfo.SceneIds)
+                    {
+                        var collectionEpisode = _episodeService.FindEpisodeBySeasonAndMetadata(
+                            series.Id,
+                            collectionYears,
+                            null,
+                            null,
+                            new[] { sceneId },
+                            null);
+
+                        if (collectionEpisode != null)
+                        {
+                            collectionEpisodes.Add(collectionEpisode);
+                        }
+                    }
+
+                    if (collectionEpisodes.Any())
+                    {
+                        _logger.Debug("Pack/collection release resolved to {0} individual episodes: {1}", collectionEpisodes.Count, parsedEpisodeInfo.ReleaseTitle);
+                        return collectionEpisodes.Distinct().ToList();
+                    }
+                }
+
+                _logger.Debug("Pack/collection release not mapped to a single episode: {0}", parsedEpisodeInfo.ReleaseTitle);
+                return new List<Episode>();
+            }
+
             // Primary air date resolved by the title parser
             if (!parsedEpisodeInfo.AirDate.IsNullOrWhiteSpace())
             {
@@ -263,14 +313,41 @@ namespace NzbDrone.Core.Parser
                     return new List<Episode> { episode };
                 }
             }
+            else if (parsedEpisodeInfo.UseYearAsSeason)
+            {
+                var years = GetSeasonYears(parsedEpisodeInfo);
+                var episode = _episodeService.FindEpisodeBySeasonAndMetadata(
+                    series.Id,
+                    years,
+                    parsedEpisodeInfo.ReleaseTokens,
+                    parsedEpisodeInfo.SceneTitle,
+                    parsedEpisodeInfo.SceneIds,
+                    parsedEpisodeInfo.Performers);
+
+                if (episode != null)
+                {
+                    _logger.Debug("Found episode by year metadata {0} for release '{1}'", string.Join(",", years), parsedEpisodeInfo.ReleaseTokens);
+                    return new List<Episode> { episode };
+                }
+
+                if (years.Any() && !parsedEpisodeInfo.EpisodeToken.IsNullOrWhiteSpace())
+                {
+                    episode = _episodeService.FindEpisodeBySeasonAndToken(series.Id, years.First(), parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
+
+                    if (episode != null)
+                    {
+                        _logger.Debug("Found episode by scene token {0} in year {1}", parsedEpisodeInfo.EpisodeToken, years.First());
+                        return new List<Episode> { episode };
+                    }
+                }
+            }
             else if (parsedEpisodeInfo.SeasonNumber > 0)
             {
-                // Site release without a full air date: use the year as the season and match by S/E token or title
                 var episode = _episodeService.FindEpisodeBySeasonAndToken(series.Id, parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
 
                 if (episode != null)
                 {
-                    _logger.Debug("Found episode by season {0} (year) for release '{1}'", parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.ReleaseTokens);
+                    _logger.Debug("Found episode by season {0} for release '{1}'", parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.ReleaseTokens);
                     return new List<Episode> { episode };
                 }
             }
@@ -285,6 +362,14 @@ namespace NzbDrone.Core.Parser
                     _logger.Debug("Found episode by scene token {0} for release '{1}'", parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
                     return new List<Episode> { episode };
                 }
+            }
+
+            if (parsedEpisodeInfo.Year == null &&
+                parsedEpisodeInfo.SeasonNumber <= 0 &&
+                parsedEpisodeInfo.AirDate.IsNullOrWhiteSpace() &&
+                parsedEpisodeInfo.EpisodeToken.IsNullOrWhiteSpace())
+            {
+                _logger.Debug("Unresolved release reason NoYear: {0}", parsedEpisodeInfo.ReleaseTitle);
             }
 
             // Fallback to external ID lookup if air date matching failed
@@ -606,7 +691,18 @@ namespace NzbDrone.Core.Parser
 
             if (series == null)
             {
-                _logger.Debug("No matching series {0}", parsedEpisodeInfo.SeriesTitle);
+                if (parsedEpisodeInfo.Sites == null || !parsedEpisodeInfo.Sites.Any())
+                {
+                    _logger.Debug("Unresolved release reason NoSite: {0}", parsedEpisodeInfo.ReleaseTitle);
+                }
+                else
+                {
+                    _logger.Debug("Unresolved release reason NoSeries: sites={0} candidates={1} release={2}",
+                        string.Join(",", parsedEpisodeInfo.Sites),
+                        string.Join(",", parsedEpisodeInfo.SeriesTitleCandidates ?? new List<string>()),
+                        parsedEpisodeInfo.ReleaseTitle);
+                }
+
                 return null;
             }
 
@@ -629,7 +725,7 @@ namespace NzbDrone.Core.Parser
                 firstResolved ??= series;
 
                 // Only trust a candidate if it actually contains the episode we're looking for
-                var episode = _episodeService.FindEpisodeBySeasonAndToken(series.Id, parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
+                var episode = FindEpisodeForSiteCandidate(series, parsedEpisodeInfo);
 
                 if (episode != null)
                 {
@@ -644,6 +740,45 @@ namespace NzbDrone.Core.Parser
             }
 
             return firstResolved;
+        }
+
+        private Episode FindEpisodeForSiteCandidate(Series series, ParsedEpisodeInfo parsedEpisodeInfo)
+        {
+            if (parsedEpisodeInfo.UseYearAsSeason)
+            {
+                return _episodeService.FindEpisodeBySeasonAndMetadata(
+                    series.Id,
+                    GetSeasonYears(parsedEpisodeInfo),
+                    parsedEpisodeInfo.ReleaseTokens,
+                    parsedEpisodeInfo.SceneTitle,
+                    parsedEpisodeInfo.SceneIds,
+                    parsedEpisodeInfo.Performers);
+            }
+
+            return _episodeService.FindEpisodeBySeasonAndToken(series.Id, parsedEpisodeInfo.SeasonNumber, parsedEpisodeInfo.EpisodeToken, parsedEpisodeInfo.ReleaseTokens);
+        }
+
+        private static List<int> GetSeasonYears(ParsedEpisodeInfo parsedEpisodeInfo)
+        {
+            var first = parsedEpisodeInfo.Year ?? parsedEpisodeInfo.SeasonNumber;
+            var last = parsedEpisodeInfo.YearLast ?? first;
+
+            if (first <= 0)
+            {
+                return new List<int>();
+            }
+
+            if (last < first)
+            {
+                last = first;
+            }
+
+            if (last - first > 20)
+            {
+                last = first;
+            }
+
+            return Enumerable.Range(first, last - first + 1).ToList();
         }
 
         private Series FindSeriesBySiteTokens(IEnumerable<string> knownCandidates, string releaseTitle)

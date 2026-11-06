@@ -189,6 +189,17 @@ export const defaultState = {
           type: filterTypes.EQUAL
         }
       ]
+    },
+    {
+      key: 'sceneViewed',
+      label: () => translate('SceneViewed'),
+      filters: [
+        {
+          key: 'eventType',
+          value: '8',
+          type: filterTypes.EQUAL
+        }
+      ]
     }
   ],
 

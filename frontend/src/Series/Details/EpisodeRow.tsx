@@ -1,5 +1,7 @@
 import React, { useCallback } from 'react';
+import { useDispatch } from 'react-redux';
 import Icon from 'Components/Icon';
+import SpinnerIconButton from 'Components/Link/SpinnerIconButton';
 import MonitorToggleButton from 'Components/MonitorToggleButton';
 import RelativeDateCell from 'Components/Table/Cells/RelativeDateCell';
 import TableRowCell from 'Components/Table/Cells/TableRowCell';
@@ -19,6 +21,7 @@ import * as mediaInfoTypes from 'EpisodeFile/mediaInfoTypes';
 import useEpisodeFile from 'EpisodeFile/useEpisodeFile';
 import { icons } from 'Helpers/Props';
 import useSeries from 'Series/useSeries';
+import { toggleEpisodesViewed } from 'Store/Actions/episodeActions';
 import MediaInfoModel from 'typings/MediaInfo';
 import formatBytes from 'Utilities/Number/formatBytes';
 import formatCustomFormatScore from 'Utilities/Number/formatCustomFormatScore';
@@ -31,6 +34,7 @@ interface EpisodeRowProps {
   seriesId: number;
   episodeFileId?: number;
   monitored: boolean;
+  viewed: boolean;
   seasonNumber: number;
   episodeNumber: number;
   absoluteEpisodeNumber?: number;
@@ -65,6 +69,7 @@ function EpisodeRow({
   seriesId,
   episodeFileId,
   monitored,
+  viewed,
   releaseDate,
   actors = [],
   runtime,
@@ -81,8 +86,18 @@ function EpisodeRow({
   columns,
   onMonitorEpisodePress,
 }: EpisodeRowProps) {
+  const dispatch = useDispatch();
   const { monitored: seriesMonitored } = useSeries(seriesId)!;
   const episodeFile = useEpisodeFile(episodeFileId);
+
+  const handleViewedPress = useCallback(() => {
+    dispatch(
+      toggleEpisodesViewed({
+        episodeIds: [id],
+        viewed: !viewed,
+      })
+    );
+  }, [dispatch, id, viewed]);
 
   const customFormats = episodeFile?.customFormats ?? [];
   const customFormatScore = episodeFile?.customFormatScore ?? 0;
@@ -112,6 +127,23 @@ function EpisodeRow({
                 isSaving={isSaving}
                 onPress={handleMonitorEpisodePress}
               />
+            </TableRowCell>
+          );
+        }
+
+        if (name === 'viewed') {
+          return (
+            <TableRowCell key={name} className={styles.viewed}>
+              {viewed ? (
+                <SpinnerIconButton
+                  name={icons.VIEW}
+                  size={16}
+                  title={translate('MarkAsUnviewed')}
+                  aria-label={translate('MarkAsUnviewed')}
+                  isSpinning={isSaving}
+                  onPress={handleViewedPress}
+                />
+              ) : null}
             </TableRowCell>
           );
         }

@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using Microsoft.AspNetCore.Mvc;
+using NzbDrone.Common.Extensions;
 using NzbDrone.Core.CustomFormats;
 using NzbDrone.Core.Datastore.Events;
 using NzbDrone.Core.DecisionEngine.Specifications;
@@ -30,6 +32,7 @@ namespace Whisparr.Api.V3.EpisodeFiles
         private readonly IMediaFileService _mediaFileService;
         private readonly IDeleteMediaFiles _mediaFileDeletionService;
         private readonly ISeriesService _seriesService;
+        private readonly IEpisodeService _episodeService;
         private readonly ICustomFormatCalculationService _formatCalculator;
         private readonly IUpgradableSpecification _upgradableSpecification;
 
@@ -37,6 +40,7 @@ namespace Whisparr.Api.V3.EpisodeFiles
                              IMediaFileService mediaFileService,
                              IDeleteMediaFiles mediaFileDeletionService,
                              ISeriesService seriesService,
+                             IEpisodeService episodeService,
                              ICustomFormatCalculationService formatCalculator,
                              IUpgradableSpecification upgradableSpecification)
             : base(signalRBroadcaster)
@@ -44,6 +48,7 @@ namespace Whisparr.Api.V3.EpisodeFiles
             _mediaFileService = mediaFileService;
             _mediaFileDeletionService = mediaFileDeletionService;
             _seriesService = seriesService;
+            _episodeService = episodeService;
             _formatCalculator = formatCalculator;
             _upgradableSpecification = upgradableSpecification;
         }
@@ -178,6 +183,80 @@ namespace Whisparr.Api.V3.EpisodeFiles
             }
 
             return new { };
+        }
+
+        [HttpPost("deleted")]
+        [Consumes("application/json")]
+        [ProducesResponseType(typeof(object), 202)]
+        public IActionResult NotifyEpisodeFileDeleted([FromBody] EpisodeFileDeletedResource resource)
+        {
+            EpisodeFile episodeFile;
+
+            if (resource.EpisodeFileId.HasValue && resource.EpisodeFileId.Value > 0)
+            {
+                episodeFile = _mediaFileService.Get(resource.EpisodeFileId.Value);
+
+                if (episodeFile == null)
+                {
+                    return NotFound(new { message = "Episode file not found", episodeFileId = resource.EpisodeFileId });
+                }
+            }
+            else
+            {
+                var input = resource.FileName.IsNotNullOrWhiteSpace() ? resource.FileName : resource.FilePath;
+
+                if (input.IsNullOrWhiteSpace())
+                {
+                    throw new BadRequestException("episodeFileId, fileName or filePath must be provided");
+                }
+
+                var normalizedInput = input.Replace('\\', '/');
+                var normalizedFileName = Path.GetFileName(normalizedInput);
+                var episodeFiles = _mediaFileService.GetFilesByFileName(normalizedFileName);
+
+                if (episodeFiles.Count > 1)
+                {
+                    return BadRequest(new
+                    {
+                        message = "Multiple episode files match the provided file name",
+                        candidates = episodeFiles.Select(f => new
+                        {
+                            fileId = f.Id,
+                            seriesId = f.SeriesId,
+                            relativePath = f.RelativePath,
+                            sceneName = f.SceneName
+                        })
+                    });
+                }
+
+                if (episodeFiles.Count == 0)
+                {
+                    return NotFound(new
+                    {
+                        message = "No episode file matched the provided file name or path",
+                        fileName = resource.FileName,
+                        filePath = resource.FilePath
+                    });
+                }
+
+                episodeFile = episodeFiles[0];
+            }
+
+            var episodeFileId = episodeFile.Id;
+            var seriesId = episodeFile.SeriesId;
+            var episodeIds = _episodeService.GetEpisodesByFileId(episodeFileId)
+                                            .Select(e => e.Id)
+                                            .ToList();
+
+            _mediaFileService.Delete(episodeFile, DeleteMediaFileReason.MissingFromDisk);
+
+            return Accepted(new
+            {
+                episodeFileId,
+                seriesId,
+                episodeIds,
+                deleted = true
+            });
         }
 
         [HttpPut("bulk")]

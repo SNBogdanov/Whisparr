@@ -29,6 +29,8 @@ function getIconName(eventType: HistoryEventType, data: HistoryData) {
       return icons.ORGANIZE;
     case 'downloadIgnored':
       return icons.IGNORE;
+    case 'sceneViewed':
+      return icons.VIEW;
     default:
       return icons.UNKNOWN;
   }
@@ -64,6 +66,8 @@ function getTooltip(eventType: HistoryEventType, data: HistoryData) {
       return translate('EpisodeFileRenamedTooltip');
     case 'downloadIgnored':
       return translate('DownloadIgnoredTooltip');
+    case 'sceneViewed':
+      return translate('SceneViewedTooltip');
     default:
       return translate('UnknownEventTooltip');
   }

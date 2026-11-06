@@ -41,6 +41,22 @@ namespace Whisparr.Api.V3.History
                 return null;
             }
 
+            if (model.EventType == EpisodeHistoryEventType.SceneViewed)
+            {
+                return new HistoryResource
+                {
+                    Id = model.Id,
+                    EpisodeId = model.EpisodeId,
+                    SeriesId = model.SeriesId,
+                    SourceTitle = model.SourceTitle,
+                    Date = model.Date,
+                    EventType = model.EventType,
+                    Data = model.Data,
+                    CustomFormats = new List<CustomFormatResource>(),
+                    CustomFormatScore = 0
+                };
+            }
+
             var customFormats = formatCalculator.ParseCustomFormat(model, model.Series);
             var customFormatScore = model.Series.QualityProfile.Value.CalculateCustomFormatScore(customFormats);
 

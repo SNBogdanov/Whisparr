@@ -15,6 +15,7 @@ import {
   GrabbedHistoryData,
   HistoryData,
   HistoryEventType,
+  SceneViewedHistory,
 } from 'typings/History';
 import formatDateTime from 'Utilities/Date/formatDateTime';
 import formatAge from 'Utilities/Number/formatAge';
@@ -195,6 +196,20 @@ function HistoryDetails(props: HistoryDetailsProps) {
         {message ? (
           <DescriptionListItem title={translate('Message')} data={message} />
         ) : null}
+
+        {source ? (
+          <DescriptionListItem title={translate('Source')} data={source} />
+        ) : null}
+      </DescriptionList>
+    );
+  }
+
+  if (eventType === 'sceneViewed') {
+    const { source } = data as SceneViewedHistory;
+
+    return (
+      <DescriptionList>
+        <DescriptionListItem title={translate('Name')} data={sourceTitle} />
 
         {source ? (
           <DescriptionListItem title={translate('Source')} data={source} />

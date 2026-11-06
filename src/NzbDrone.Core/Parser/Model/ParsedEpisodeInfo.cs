@@ -20,10 +20,21 @@ namespace NzbDrone.Core.Parser.Model
         public int SeasonNumber { get; set; } // Season derived from the year for site releases without a full air date
         public string EpisodeToken { get; set; } // Explicit Sxx:Eyy token found in the release title
         public List<string> SeriesTitleCandidates { get; set; } // Candidate series (site domains) for multi-site releases
+        public List<string> Sites { get; set; } // Raw site/domain tokens found in the release title
+        public int? Year { get; set; } // Year from a year-only tag block
+        public int? YearLast { get; set; } // Last year of a year range (e.g. [2007-2008 гг])
+        public List<string> Performers { get; set; } // Performer names extracted from the release title
+        public string SceneTitle { get; set; } // Scene title extracted from the release title
+        public List<string> SceneIds { get; set; } // Scene/release identifiers (E123, #169, ...)
+        public bool IsCollection { get; set; } // Pack/collection release rather than a single scene
+        public bool UseYearAsSeason { get; set; } // The parsed season came from a year-only tag block
 
         public ParsedEpisodeInfo()
         {
             Languages = new List<Language>();
+            Sites = new List<string>();
+            Performers = new List<string>();
+            SceneIds = new List<string>();
         }
 
         public bool IsDaily

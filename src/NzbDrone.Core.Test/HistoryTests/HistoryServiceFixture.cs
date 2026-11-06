@@ -71,5 +71,26 @@ namespace NzbDrone.Core.Test.HistoryTests
             Mocker.GetMock<IHistoryRepository>()
                 .Verify(v => v.Insert(It.Is<EpisodeHistory>(h => h.SourceTitle == Path.GetFileNameWithoutExtension(localEpisode.Path))));
         }
+
+        [Test]
+        public void should_record_scene_viewed_history()
+        {
+            var episode = Builder<Episode>.CreateNew()
+                                          .With(e => e.Id = 1)
+                                          .With(e => e.SeriesId = 2)
+                                          .With(e => e.Title = "Test Scene")
+                                          .Build();
+
+            Subject.RecordEpisodeViewed(episode);
+
+            Mocker.GetMock<IHistoryRepository>()
+                .Verify(v => v.Insert(It.Is<EpisodeHistory>(h =>
+                    h.EventType == EpisodeHistoryEventType.SceneViewed &&
+                    h.EpisodeId == episode.Id &&
+                    h.SeriesId == episode.SeriesId &&
+                    h.SourceTitle == episode.Title &&
+                    h.Quality != null &&
+                    h.Languages != null)));
+        }
     }
 }

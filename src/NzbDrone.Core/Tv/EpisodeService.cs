@@ -6,6 +6,7 @@ using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Configuration;
 using NzbDrone.Core.Datastore;
+using NzbDrone.Core.History;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
@@ -21,6 +22,7 @@ namespace NzbDrone.Core.Tv
         Episode FindEpisodeByTitle(int seriesId, int seasonNumber, string releaseTitle);
         Episode FindEpisodeByTitleUnique(int seriesId, int seasonNumber, string releaseTitle);
         Episode FindEpisodeBySeasonAndToken(int seriesId, int seasonNumber, string episodeToken, string releaseTitle, bool requireUniqueTitle = false);
+        Episode FindEpisodeBySeasonAndMetadata(int seriesId, IEnumerable<int> seasonNumbers, string releaseTokens, string sceneTitle, IEnumerable<string> sceneIds, IEnumerable<string> performers);
         Episode FindEpisodeByToken(int seriesId, string episodeToken);
         Episode FindEpisode(int seriesId, string date, string part);
         bool HasEpisodesOnDate(int seriesId, string date);
@@ -34,6 +36,7 @@ namespace NzbDrone.Core.Tv
         void UpdateEpisode(Episode episode);
         void SetEpisodeMonitored(int episodeId, bool monitored);
         void SetMonitored(IEnumerable<int> ids, bool monitored);
+        void SetEpisodesViewed(IEnumerable<int> ids, bool viewed);
         void UpdateEpisodes(List<Episode> episodes);
         void UpdateLastSearchTime(List<Episode> episodes);
         List<Episode> EpisodesBetweenDates(DateTime start, DateTime end, bool includeUnmonitored);
@@ -50,12 +53,14 @@ namespace NzbDrone.Core.Tv
     {
         private readonly IEpisodeRepository _episodeRepository;
         private readonly IConfigService _configService;
+        private readonly IHistoryService _historyService;
         private readonly Logger _logger;
 
-        public EpisodeService(IEpisodeRepository episodeRepository, IConfigService configService, Logger logger)
+        public EpisodeService(IEpisodeRepository episodeRepository, IConfigService configService, IHistoryService historyService, Logger logger)
         {
             _episodeRepository = episodeRepository;
             _configService = configService;
+            _historyService = historyService;
             _logger = logger;
         }
 
@@ -200,6 +205,196 @@ namespace NzbDrone.Core.Tv
                 : FindEpisodeByTitle(seriesId, seasonNumber, releaseTitle);
         }
 
+        public Episode FindEpisodeBySeasonAndMetadata(int seriesId, IEnumerable<int> seasonNumbers, string releaseTokens, string sceneTitle, IEnumerable<string> sceneIds, IEnumerable<string> performers)
+        {
+            var seasons = seasonNumbers?.Where(s => s > 0).Distinct().ToList() ?? new List<int>();
+            var episodes = seasons.SelectMany(s => _episodeRepository.GetEpisodes(seriesId, s)).ToList();
+
+            if (!episodes.Any())
+            {
+                _logger.Debug("No episodes found in season(s) {0} for release '{1}'", string.Join(",", seasons), releaseTokens);
+                return null;
+            }
+
+            var normalizedTokens = Parser.Parser.NormalizeEpisodeTitle(releaseTokens ?? string.Empty);
+            var normalizedSceneTitle = Parser.Parser.NormalizeEpisodeTitle(sceneTitle ?? string.Empty);
+
+            var sceneIdDigits = (sceneIds ?? Enumerable.Empty<string>())
+                .Select(id => new string(id.Where(char.IsDigit).ToArray()))
+                .Where(id => id.IsNotNullOrWhiteSpace())
+                .Distinct()
+                .ToList();
+
+            if (sceneIdDigits.Any())
+            {
+                var idMatches = episodes.Where(e => e.Title.IsNotNullOrWhiteSpace() &&
+                    sceneIdDigits.Any(id => Regex.IsMatch(Parser.Parser.NormalizeEpisodeTitle(e.Title), $@"(?<!\d){Regex.Escape(id)}(?!\d)", RegexOptions.IgnoreCase)))
+                    .ToList();
+
+                if (idMatches.Count == 1)
+                {
+                    _logger.Debug("Matched episode {0} using scene id {1} for release '{2}'", idMatches.First().Id, sceneIdDigits.First(), releaseTokens);
+                    return idMatches.First();
+                }
+
+                if (idMatches.Count > 1)
+                {
+                    LogAmbiguousYearMatch(seriesId, idMatches, releaseTokens);
+                    return null;
+                }
+            }
+
+            var searchText = normalizedTokens.IsNotNullOrWhiteSpace() ? normalizedTokens : normalizedSceneTitle;
+
+            if (searchText.IsNotNullOrWhiteSpace())
+            {
+                var matches = MatchEpisodes(searchText, episodes);
+                var distinctIds = matches.Select(e => e.Id).Distinct().ToList();
+
+                if (distinctIds.Count == 1)
+                {
+                    _logger.Debug("Matched episode {0} using scene title/performers for release '{1}'", matches.First().Id, releaseTokens);
+                    return matches.First();
+                }
+
+                if (distinctIds.Count > 1)
+                {
+                    LogAmbiguousYearMatch(seriesId, matches, releaseTokens);
+                    return null;
+                }
+            }
+
+            var performerNames = (performers ?? Enumerable.Empty<string>())
+                .Select(performer => Parser.Parser.NormalizeEpisodeTitle(performer ?? string.Empty))
+                .Where(performer => performer.IsNotNullOrWhiteSpace())
+                .Distinct()
+                .ToList();
+
+            if (performerNames.Any())
+            {
+                var scored = episodes.Select(episode => (Episode: episode, Score: ScoreYearOnlyCandidate(episode, searchText, normalizedSceneTitle, performerNames)))
+                    .Where(candidate => candidate.Score > 0)
+                    .OrderByDescending(candidate => candidate.Score)
+                    .ToList();
+
+                if (scored.Any())
+                {
+                    if (scored[0].Score >= 0.80 && (scored.Count == 1 || scored[1].Score < scored[0].Score))
+                    {
+                        _logger.Debug("Matched episode {0} by performer/title score {1:F2} for release '{2}'", scored[0].Episode.Id, scored[0].Score, releaseTokens);
+                        return scored[0].Episode;
+                    }
+
+                    if (scored[0].Score >= 0.55)
+                    {
+                        LogAmbiguousYearMatch(seriesId, scored.Select(candidate => candidate.Episode).ToList(), releaseTokens);
+                    }
+                }
+            }
+
+            _logger.Debug("Unresolved release reason NoEpisodeInYear: series={0} seasons={1} release={2}", seriesId, string.Join(",", seasons), releaseTokens);
+
+            return null;
+        }
+
+        private static double ScoreYearOnlyCandidate(Episode episode, string searchText, string sceneTitle, List<string> performerNames)
+        {
+            var actors = episode.Actors ?? new List<Actor>();
+            var actorNames = actors.Select(actor => Parser.Parser.NormalizeEpisodeTitle(actor.Name ?? string.Empty))
+                .Where(name => name.IsNotNullOrWhiteSpace())
+                .Distinct()
+                .ToList();
+
+            if (!actorNames.Any())
+            {
+                return 0;
+            }
+
+            var tokens = searchText ?? string.Empty;
+            var matchedPerformers = performerNames
+                .Where(performer => actorNames.Any(name => name.Contains(performer, StringComparison.OrdinalIgnoreCase) || performer.Contains(name, StringComparison.OrdinalIgnoreCase)))
+                .Distinct()
+                .ToList();
+
+            if (!matchedPerformers.Any())
+            {
+                return 0;
+            }
+
+            var femalePerformers = actors.Where(actor => actor.Gender == Gender.Female)
+                .Select(actor => Parser.Parser.NormalizeEpisodeTitle(actor.Name ?? string.Empty))
+                .Where(name => name.IsNotNullOrWhiteSpace())
+                .Distinct()
+                .ToList();
+
+            var score = 0.0;
+
+            if (femalePerformers.Any() && femalePerformers.All(name => tokens.Contains(name)))
+            {
+                score += 0.30;
+            }
+
+            score += Math.Min(0.30, matchedPerformers.Count * 0.10);
+
+            if (sceneTitle.IsNotNullOrWhiteSpace())
+            {
+                var similarity = TitleSimilarity(sceneTitle, episode.Title);
+
+                if (similarity >= 0.80)
+                {
+                    score += 0.40;
+                }
+                else
+                {
+                    score += similarity * 0.30;
+                }
+            }
+
+            return score + 0.10;
+        }
+
+        private static double TitleSimilarity(string left, string right)
+        {
+            var first = Parser.Parser.NormalizeEpisodeTitle(left ?? string.Empty);
+            var second = Parser.Parser.NormalizeEpisodeTitle(right ?? string.Empty);
+
+            if (first.IsNullOrWhiteSpace() || second.IsNullOrWhiteSpace())
+            {
+                return 0;
+            }
+
+            if (first.Equals(second, StringComparison.OrdinalIgnoreCase))
+            {
+                return 1;
+            }
+
+            if (first.Contains(second, StringComparison.OrdinalIgnoreCase) ||
+                second.Contains(first, StringComparison.OrdinalIgnoreCase))
+            {
+                return 0.8;
+            }
+
+            var firstTokens = first.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var secondTokens = second.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            if (firstTokens.Length == 0 || secondTokens.Length == 0)
+            {
+                return 0;
+            }
+
+            var intersection = firstTokens.Intersect(secondTokens, StringComparer.OrdinalIgnoreCase).Count();
+
+            return (double)intersection / Math.Max(firstTokens.Length, secondTokens.Length);
+        }
+
+        private void LogAmbiguousYearMatch(int seriesId, List<Episode> candidates, string releaseTokens)
+        {
+            _logger.Debug("Ambiguous year-only match for release '{0}' in series {1}: candidates {2}",
+                releaseTokens,
+                seriesId,
+                string.Join(", ", candidates.Select(episode => $"{episode.Id}:'{episode.Title}'")));
+        }
+
         public Episode FindEpisodeByToken(int seriesId, string episodeToken)
         {
             var normalizedToken = Parser.Parser.NormalizeEpisodeTitle(episodeToken);
@@ -262,6 +457,26 @@ namespace NzbDrone.Core.Tv
         public void SetMonitored(IEnumerable<int> ids, bool monitored)
         {
             _episodeRepository.SetMonitored(ids, monitored);
+        }
+
+        public void SetEpisodesViewed(IEnumerable<int> ids, bool viewed)
+        {
+            var transitionedIds = _episodeRepository.SetViewed(ids, viewed);
+
+            if (!transitionedIds.Any())
+            {
+                return;
+            }
+
+            if (viewed)
+            {
+                foreach (var episode in _episodeRepository.Get(transitionedIds))
+                {
+                    _historyService.RecordEpisodeViewed(episode);
+                }
+            }
+
+            _logger.Debug("Viewed flag for {0} episode(s) was set to {1}", transitionedIds.Count, viewed);
         }
 
         public void SetEpisodeMonitoredBySeason(int seriesId, int seasonNumber, bool monitored)

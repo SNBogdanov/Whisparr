@@ -9,7 +9,8 @@ export type HistoryEventType =
   | 'downloadFailed'
   | 'episodeFileDeleted'
   | 'episodeFileRenamed'
-  | 'downloadIgnored';
+  | 'downloadIgnored'
+  | 'sceneViewed';
 
 export interface GrabbedHistoryData {
   indexer: string;
@@ -64,13 +65,18 @@ export interface DownloadIgnoredHistory {
   message: string;
 }
 
+export interface SceneViewedHistory {
+  source?: string;
+}
+
 export type HistoryData =
   | GrabbedHistoryData
   | DownloadFailedHistory
   | DownloadFolderImportedHistory
   | EpisodeFileDeletedHistory
   | EpisodeFileRenamedHistory
-  | DownloadIgnoredHistory;
+  | DownloadIgnoredHistory
+  | SceneViewedHistory;
 
 export default interface History {
   episodeId: number;

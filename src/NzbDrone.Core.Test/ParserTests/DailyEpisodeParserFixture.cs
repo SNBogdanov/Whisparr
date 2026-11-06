@@ -97,5 +97,26 @@ namespace NzbDrone.Core.Test.ParserTests
             result.SeriesTitle.Should().Be(title);
             result.AirDate.Should().Be(airDate.ToString(Episode.AIR_DATE_FORMAT));
         }
+
+        [TestCase("01.JAN.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 1, 1)]
+        [TestCase("01.FEB.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 2, 1)]
+        [TestCase("01.MAR.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 3, 1)]
+        [TestCase("01.APR.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 4, 1)]
+        [TestCase("01.MAY.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 5, 1)]
+        [TestCase("01.JUN.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 6, 1)]
+        [TestCase("01.JUL.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 7, 1)]
+        [TestCase("01.AUG.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 8, 1)]
+        [TestCase("01.SEP.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 9, 1)]
+        [TestCase("01.OCT.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 10, 1)]
+        [TestCase("01.NOV.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 11, 1)]
+        [TestCase("01.DEC.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 12, 1)]
+        [TestCase("01.Sep.2012.HANDWASH.2.BY.LYDIABENNETT.mp4", 2012, 9, 1)]
+        public void should_parse_daily_episode_with_day_short_month_year_before_title(string postTitle, int year, int month, int day)
+        {
+            var result = Parser.Parser.ParseTitle(postTitle);
+            var airDate = new DateTime(year, month, day);
+            result.Should().NotBeNull();
+            result.AirDate.Should().Be(airDate.ToString(Episode.AIR_DATE_FORMAT));
+        }
     }
 }

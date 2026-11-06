@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { Tab, TabList, TabPanel, Tabs } from 'react-tabs';
 import Button from 'Components/Link/Button';
+import SpinnerIconButton from 'Components/Link/SpinnerIconButton';
 import ModalBody from 'Components/Modal/ModalBody';
 import ModalContent from 'Components/Modal/ModalContent';
 import ModalFooter from 'Components/Modal/ModalFooter';
@@ -11,9 +12,13 @@ import Episode from 'Episode/Episode';
 import EpisodeDetailsTab from 'Episode/EpisodeDetailsTab';
 import episodeEntities from 'Episode/episodeEntities';
 import useEpisode, { EpisodeEntity } from 'Episode/useEpisode';
+import { icons } from 'Helpers/Props';
 import Series from 'Series/Series';
 import useSeries from 'Series/useSeries';
-import { toggleEpisodeMonitored } from 'Store/Actions/episodeActions';
+import {
+  toggleEpisodeMonitored,
+  toggleEpisodesViewed,
+} from 'Store/Actions/episodeActions';
 import {
   cancelFetchReleases,
   clearReleases,
@@ -72,6 +77,7 @@ function EpisodeDetailsModalContent(props: EpisodeDetailsModalContentProps) {
     absoluteEpisodeNumber,
     releaseDate,
     monitored,
+    viewed,
   } = useEpisode(episodeId, episodeEntity) as Episode;
 
   const handleTabSelect = useCallback(
@@ -96,6 +102,16 @@ function EpisodeDetailsModalContent(props: EpisodeDetailsModalContentProps) {
     [episodeEntity, episodeId, dispatch]
   );
 
+  const handleViewedPress = useCallback(() => {
+    dispatch(
+      toggleEpisodesViewed({
+        episodeEntity,
+        episodeIds: [episodeId],
+        viewed: !viewed,
+      })
+    );
+  }, [episodeEntity, episodeId, viewed, dispatch]);
+
   useEffect(() => {
     return () => {
       // Clear pending releases here, so we can reshow the search
@@ -116,6 +132,19 @@ function EpisodeDetailsModalContent(props: EpisodeDetailsModalContentProps) {
           isDisabled={!seriesMonitored}
           isSaving={isSaving}
           onPress={handleMonitorEpisodePress}
+        />
+
+        <SpinnerIconButton
+          name={viewed ? icons.VIEW : icons.SFW}
+          size={18}
+          title={
+            viewed ? translate('MarkAsUnviewed') : translate('MarkAsViewed')
+          }
+          aria-label={
+            viewed ? translate('MarkAsUnviewed') : translate('MarkAsViewed')
+          }
+          isSpinning={isSaving}
+          onPress={handleViewedPress}
         />
 
         <span className={styles.seriesTitle}>{seriesTitle}</span>

@@ -27,6 +27,8 @@ namespace NzbDrone.Core.Tv
         public string Overview { get; set; }
         public int Runtime { get; set; }
         public bool Monitored { get; set; }
+        public bool Viewed { get; set; }
+        public DateTime? ViewedAt { get; set; }
         public int? AbsoluteEpisodeNumber { get; set; }
         public Ratings Ratings { get; set; }
         public List<MediaCover.MediaCover> Images { get; set; }

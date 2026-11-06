@@ -26,6 +26,8 @@ function getHeaderTitle(eventType: HistoryEventType) {
       return translate('EpisodeFileRenamed');
     case 'downloadIgnored':
       return translate('DownloadIgnored');
+    case 'sceneViewed':
+      return translate('SceneViewed');
     default:
       return translate('Unknown');
   }

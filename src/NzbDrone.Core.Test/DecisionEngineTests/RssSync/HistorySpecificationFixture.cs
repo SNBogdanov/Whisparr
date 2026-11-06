@@ -89,12 +89,19 @@ namespace NzbDrone.Core.Test.DecisionEngineTests.RssSync
             Mocker.GetMock<ICustomFormatCalculationService>()
                   .Setup(x => x.ParseCustomFormat(It.IsAny<EpisodeHistory>(), It.IsAny<Series>()))
                   .Returns(new List<CustomFormat>());
+
+            Mocker.GetMock<IHistoryService>()
+                  .Setup(s => s.FindByEpisodeId(It.IsAny<int>()))
+                  .Returns(new List<EpisodeHistory>());
         }
 
         private void GivenMostRecentForEpisode(int episodeId, string downloadId, Tuple<QualityModel, Language> quality, DateTime date, EpisodeHistoryEventType eventType)
         {
-            Mocker.GetMock<IHistoryService>().Setup(s => s.MostRecentForEpisode(episodeId))
-                  .Returns(new EpisodeHistory { DownloadId = downloadId, Quality = quality.Item1, Date = date, EventType = eventType, Languages = new List<Language> { quality.Item2 } });
+            Mocker.GetMock<IHistoryService>().Setup(s => s.FindByEpisodeId(episodeId))
+                  .Returns(new List<EpisodeHistory>
+                  {
+                      new EpisodeHistory { DownloadId = downloadId, Quality = quality.Item1, Date = date, EventType = eventType, Languages = new List<Language> { quality.Item2 } }
+                  });
         }
 
         private void GivenCdhDisabled()
@@ -113,7 +120,7 @@ namespace NzbDrone.Core.Test.DecisionEngineTests.RssSync
         [Test]
         public void should_return_true_if_latest_history_item_is_null()
         {
-            Mocker.GetMock<IHistoryService>().Setup(s => s.MostRecentForEpisode(It.IsAny<int>())).Returns((EpisodeHistory)null);
+            Mocker.GetMock<IHistoryService>().Setup(s => s.FindByEpisodeId(It.IsAny<int>())).Returns(new List<EpisodeHistory>());
             _upgradeHistory.IsSatisfiedBy(_parseResultMulti, new()).Accepted.Should().BeTrue();
         }
 
@@ -122,6 +129,30 @@ namespace NzbDrone.Core.Test.DecisionEngineTests.RssSync
         {
             GivenMostRecentForEpisode(FIRST_EPISODE_ID, string.Empty, _notupgradableQuality, DateTime.UtcNow, EpisodeHistoryEventType.DownloadFailed);
             _upgradeHistory.IsSatisfiedBy(_parseResultMulti, new()).Accepted.Should().BeTrue();
+        }
+
+        [Test]
+        public void should_ignore_scene_viewed_events_when_finding_the_most_recent_history_item()
+        {
+            var grabbed = new EpisodeHistory
+            {
+                DownloadId = "test",
+                Quality = _notupgradableQuality.Item1,
+                Date = DateTime.UtcNow.AddMinutes(-1),
+                EventType = EpisodeHistoryEventType.Grabbed,
+                Languages = new List<Language> { _notupgradableQuality.Item2 }
+            };
+
+            var viewed = new EpisodeHistory
+            {
+                Date = DateTime.UtcNow,
+                EventType = EpisodeHistoryEventType.SceneViewed
+            };
+
+            Mocker.GetMock<IHistoryService>().Setup(s => s.FindByEpisodeId(FIRST_EPISODE_ID))
+                  .Returns(new List<EpisodeHistory> { viewed, grabbed });
+
+            _upgradeHistory.IsSatisfiedBy(_parseResultSingle, new()).Accepted.Should().BeFalse();
         }
 
 // [Test]

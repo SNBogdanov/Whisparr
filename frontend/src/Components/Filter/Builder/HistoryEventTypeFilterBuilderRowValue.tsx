@@ -41,6 +41,12 @@ const EVENT_TYPE_OPTIONS = [
       return translate('Ignored');
     },
   },
+  {
+    id: 8,
+    get name() {
+      return translate('SceneViewed');
+    },
+  },
 ];
 
 type QualityProfileFilterBuilderRowValueProps<T> = Omit<

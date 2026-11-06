@@ -96,9 +96,39 @@ namespace NzbDrone.Core.Test.MediaFiles
         [Test]
         public void should_search_for_series_using_folder_name()
         {
+            Mocker.GetMock<IDiskScanService>()
+                  .Setup(c => c.GetVideoFiles(_droneFactory, false))
+                  .Returns(System.Array.Empty<string>());
+
             Subject.ProcessRootFolder(new DirectoryInfo(_droneFactory));
 
             Mocker.GetMock<IParsingService>().Verify(c => c.GetSeries("foldername"), Times.Once());
+        }
+
+        [Test]
+        public void should_search_for_series_in_ancestor_folder_for_file()
+        {
+            var filePath = "c:\\root\\I Feel Myself\\2024.07\\30.rock.23.01.15.mp4".AsOsAgnostic();
+            var series = Builder<Series>.CreateNew().Build();
+
+            Mocker.GetMock<IDiskProvider>().Setup(c => c.FolderExists(filePath)).Returns(false);
+            Mocker.GetMock<IDiskProvider>().Setup(c => c.FileExists(filePath)).Returns(true);
+
+            Mocker.GetMock<IParsingService>().Setup(c => c.GetSeries("30.rock.23.01.15")).Returns((Series)null);
+            Mocker.GetMock<IParsingService>().Setup(c => c.GetSeries("2024.07")).Returns((Series)null);
+            Mocker.GetMock<IParsingService>().Setup(c => c.GetSeries("I Feel Myself")).Returns(series);
+
+            Mocker.GetMock<IMakeImportDecision>()
+                  .Setup(c => c.GetImportDecisions(It.IsAny<List<string>>(), It.IsAny<Series>(), It.IsAny<DownloadClientItem>(), It.IsAny<ParsedEpisodeInfo>(), It.IsAny<bool>()))
+                  .Returns(new List<ImportDecision>());
+
+            Mocker.GetMock<IImportApprovedEpisodes>()
+                  .Setup(c => c.Import(It.IsAny<List<ImportDecision>>(), It.IsAny<bool>(), It.IsAny<DownloadClientItem>(), It.IsAny<ImportMode>()))
+                  .Returns(new List<ImportResult>());
+
+            Subject.ProcessPath(filePath);
+
+            Mocker.GetMock<IParsingService>().Verify(c => c.GetSeries("I Feel Myself"), Times.Once());
         }
 
         [Test]

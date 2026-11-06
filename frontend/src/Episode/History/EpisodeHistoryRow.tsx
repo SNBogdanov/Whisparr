@@ -34,6 +34,8 @@ function getTitle(eventType: HistoryEventType) {
       return 'Episode File Deleted';
     case 'episodeFileRenamed':
       return 'Episode File Renamed';
+    case 'sceneViewed':
+      return 'Scene Viewed';
     default:
       return 'Unknown';
   }
@@ -61,7 +63,7 @@ function EpisodeHistoryRow({
   languages,
   quality,
   qualityCutoffNotMet,
-  customFormats,
+  customFormats = [],
   customFormatScore,
   date,
   data,

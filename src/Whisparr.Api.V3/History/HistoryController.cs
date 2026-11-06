@@ -52,7 +52,7 @@ namespace Whisparr.Api.V3.History
                 resource.Episode = model.Episode.ToResource();
             }
 
-            if (model.Series != null)
+            if (model.Series != null && model.Quality != null)
             {
                 resource.QualityCutoffNotMet = _upgradableSpecification.QualityCutoffNotMet(model.Series.QualityProfile.Value, model.Quality);
             }

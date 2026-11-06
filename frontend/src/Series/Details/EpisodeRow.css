@@ -4,7 +4,8 @@
   white-space: nowrap;
 }
 
-.monitored {
+.monitored,
+.viewed {
   composes: cell from '~Components/Table/Cells/TableRowCell.css';
 
   width: 42px;

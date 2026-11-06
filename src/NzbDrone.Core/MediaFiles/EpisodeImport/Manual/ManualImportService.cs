@@ -242,14 +242,7 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
             }
             else
             {
-                try
-                {
-                    series = _parsingService.GetSeries(directoryInfo.Name);
-                }
-                catch (MultipleSeriesFoundException e)
-                {
-                    _logger.Warn(e, "Unable to find series from title");
-                }
+                series = GetSeriesFromFolder(directoryInfo);
             }
 
             if (downloadId.IsNotNullOrWhiteSpace())
@@ -296,6 +289,76 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
             }
 
             return decisions.Select(decision => MapItem(decision, rootFolder, downloadId, directoryInfo.Name)).ToList();
+        }
+
+        private Series GetSeriesFromFolder(DirectoryInfo directoryInfo)
+        {
+            try
+            {
+                var series = _parsingService.GetSeries(directoryInfo.Name);
+
+                if (series != null)
+                {
+                    return series;
+                }
+            }
+            catch (MultipleSeriesFoundException e)
+            {
+                _logger.Warn(e, "Unable to find series from title");
+            }
+
+            var seriesByPath = GetSeriesByPath(directoryInfo.FullName);
+
+            if (seriesByPath != null)
+            {
+                return seriesByPath;
+            }
+
+            return GetSeriesByAncestorFolder(directoryInfo);
+        }
+
+        private Series GetSeriesByPath(string folder)
+        {
+            var seriesPaths = _seriesService.GetAllSeriesPaths();
+
+            if (seriesPaths == null)
+            {
+                return null;
+            }
+
+            var seriesId = seriesPaths
+                .Where(s => s.Value.PathEquals(folder) || s.Value.IsParentPath(folder))
+                .OrderByDescending(s => s.Value.Length)
+                .Select(s => s.Key)
+                .FirstOrDefault();
+
+            return seriesId > 0 ? _seriesService.GetSeries(seriesId) : null;
+        }
+
+        private Series GetSeriesByAncestorFolder(DirectoryInfo directoryInfo)
+        {
+            var parent = directoryInfo.Parent;
+
+            for (var i = 0; i < 3 && parent != null; i++)
+            {
+                try
+                {
+                    var series = _parsingService.GetSeries(parent.Name);
+
+                    if (series != null)
+                    {
+                        return series;
+                    }
+                }
+                catch (MultipleSeriesFoundException e)
+                {
+                    _logger.Warn(e, "Unable to find series from ancestor folder title");
+                }
+
+                parent = parent.Parent;
+            }
+
+            return null;
         }
 
         private ManualImportItem ProcessFile(string rootFolder, string baseFolder, string file, string downloadId, Series series = null)

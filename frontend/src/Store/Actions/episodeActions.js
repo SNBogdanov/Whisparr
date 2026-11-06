@@ -38,6 +38,12 @@ export const defaultState = {
       isModifiable: 'disabled'
     },
     {
+      name: 'viewed',
+      columnLabel: () => translate('Viewed'),
+      isVisible: true,
+      isSortable: true
+    },
+    {
       name: 'title',
       label: () => translate('Title'),
       isVisible: true,
@@ -167,6 +173,7 @@ export const SET_EPISODES_TABLE_OPTION = 'episodes/setEpisodesTableOption';
 export const CLEAR_EPISODES = 'episodes/clearEpisodes';
 export const TOGGLE_EPISODE_MONITORED = 'episodes/toggleEpisodeMonitored';
 export const TOGGLE_EPISODES_MONITORED = 'episodes/toggleEpisodesMonitored';
+export const TOGGLE_EPISODES_VIEWED = 'episodes/toggleEpisodesViewed';
 
 //
 // Action Creators
@@ -177,6 +184,7 @@ export const setEpisodesTableOption = createAction(SET_EPISODES_TABLE_OPTION);
 export const clearEpisodes = createAction(CLEAR_EPISODES);
 export const toggleEpisodeMonitored = createThunk(TOGGLE_EPISODE_MONITORED);
 export const toggleEpisodesMonitored = createThunk(TOGGLE_EPISODES_MONITORED);
+export const toggleEpisodesViewed = createThunk(TOGGLE_EPISODES_VIEWED);
 
 //
 // Action Handlers
@@ -256,6 +264,58 @@ export const actionHandlers = handleThunks({
             section: episodeSection,
             isSaving: false,
             monitored
+          });
+        })
+      ));
+    });
+
+    promise.fail((xhr) => {
+      dispatch(batchActions(
+        episodeIds.map((episodeId) => {
+          return updateItem({
+            id: episodeId,
+            section: episodeSection,
+            isSaving: false
+          });
+        })
+      ));
+    });
+  },
+
+  [TOGGLE_EPISODES_VIEWED]: function(getState, payload, dispatch) {
+    const {
+      episodeIds,
+      episodeEntity = episodeEntities.EPISODES,
+      viewed
+    } = payload;
+
+    const episodeSection = _.last(episodeEntity.split('.'));
+
+    dispatch(batchActions(
+      episodeIds.map((episodeId) => {
+        return updateItem({
+          id: episodeId,
+          section: episodeSection,
+          isSaving: true
+        });
+      })
+    ));
+
+    const promise = createAjaxRequest({
+      url: '/episode/viewed',
+      method: 'PUT',
+      data: JSON.stringify({ episodeIds, viewed }),
+      dataType: 'json'
+    }).request;
+
+    promise.done((data) => {
+      dispatch(batchActions(
+        episodeIds.map((episodeId) => {
+          return updateItem({
+            id: episodeId,
+            section: episodeSection,
+            isSaving: false,
+            viewed
           });
         })
       ));

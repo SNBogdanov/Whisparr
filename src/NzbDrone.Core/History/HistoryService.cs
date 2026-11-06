@@ -6,10 +6,13 @@ using NLog;
 using NzbDrone.Common.Extensions;
 using NzbDrone.Core.Datastore;
 using NzbDrone.Core.Download;
+using NzbDrone.Core.Languages;
 using NzbDrone.Core.MediaFiles;
 using NzbDrone.Core.MediaFiles.Events;
 using NzbDrone.Core.Messaging.Events;
 using NzbDrone.Core.Parser.Model;
+using NzbDrone.Core.Qualities;
+using NzbDrone.Core.Tv;
 using NzbDrone.Core.Tv.Events;
 
 namespace NzbDrone.Core.History
@@ -27,6 +30,7 @@ namespace NzbDrone.Core.History
         List<EpisodeHistory> FindByDownloadId(string downloadId);
         string FindDownloadId(EpisodeImportedEvent trackedDownload);
         List<EpisodeHistory> Since(DateTime date, EpisodeHistoryEventType? eventType);
+        void RecordEpisodeViewed(Episode episode);
     }
 
     public class HistoryService : IHistoryService,
@@ -364,6 +368,22 @@ namespace NzbDrone.Core.History
         public List<EpisodeHistory> Since(DateTime date, EpisodeHistoryEventType? eventType)
         {
             return _historyRepository.Since(date, eventType);
+        }
+
+        public void RecordEpisodeViewed(Episode episode)
+        {
+            var history = new EpisodeHistory
+            {
+                EventType = EpisodeHistoryEventType.SceneViewed,
+                Date = DateTime.UtcNow,
+                SourceTitle = episode.Title,
+                SeriesId = episode.SeriesId,
+                EpisodeId = episode.Id,
+                Quality = new QualityModel(),
+                Languages = new List<Language>()
+            };
+
+            _historyRepository.Insert(history);
         }
     }
 }

@@ -43,6 +43,7 @@ namespace NzbDrone.Core.History
         DownloadFailed = 4,
         EpisodeFileDeleted = 5,
         EpisodeFileRenamed = 6,
-        DownloadIgnored = 7
+        DownloadIgnored = 7,
+        SceneViewed = 8
     }
 }

@@ -27,6 +27,7 @@ namespace NzbDrone.Core.Tv
         void SetMonitoredFlat(Episode episode, bool monitored);
         void SetMonitoredBySeason(int seriesId, int seasonNumber, bool monitored);
         void SetMonitored(IEnumerable<int> ids, bool monitored);
+        List<int> SetViewed(IEnumerable<int> ids, bool viewed);
         void SetFileId(Episode episode, int fileId);
         void ClearFileId(Episode episode, bool unmonitor);
     }
@@ -178,6 +179,24 @@ namespace NzbDrone.Core.Tv
         {
             var episodes = ids.Select(x => new Episode { Id = x, Monitored = monitored }).ToList();
             SetFields(episodes, p => p.Monitored);
+        }
+
+        public List<int> SetViewed(IEnumerable<int> ids, bool viewed)
+        {
+            var episodeIds = ids.Distinct().ToList();
+
+            if (!episodeIds.Any())
+            {
+                return new List<int>();
+            }
+
+            var viewedAt = viewed ? DateTime.UtcNow : (DateTime?)null;
+
+            using (var conn = _database.OpenConnection())
+            {
+                return conn.Query<int>("UPDATE \"Episodes\" SET \"Viewed\" = @viewed, \"ViewedAt\" = @viewedAt WHERE \"Id\" IN @episodeIds AND \"Viewed\" != @viewed RETURNING \"Id\"",
+                    new { episodeIds = episodeIds.ToArray(), viewed, viewedAt }).ToList();
+            }
         }
 
         public void SetFileId(Episode episode, int fileId)

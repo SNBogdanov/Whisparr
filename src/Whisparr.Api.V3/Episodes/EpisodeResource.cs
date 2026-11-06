@@ -24,6 +24,8 @@ namespace Whisparr.Api.V3.Episodes
         public EpisodeFileResource EpisodeFile { get; set; }
         public bool HasFile { get; set; }
         public bool Monitored { get; set; }
+        public bool Viewed { get; set; }
+        public DateTime? ViewedAt { get; set; }
         public int? AbsoluteEpisodeNumber { get; set; }
         public string SeriesTitle { get; set; }
         public SeriesResource Series { get; set; }
@@ -64,6 +66,8 @@ namespace Whisparr.Api.V3.Episodes
 
                 HasFile = model.HasFile,
                 Monitored = model.Monitored,
+                Viewed = model.Viewed,
+                ViewedAt = model.ViewedAt,
                 AbsoluteEpisodeNumber = model.AbsoluteEpisodeNumber,
                 SeriesTitle = model.SeriesTitle,
 

@@ -161,12 +161,11 @@ namespace NzbDrone.Core.MediaFiles
 
         private List<ImportResult> ProcessFolder(DirectoryInfo directoryInfo, ImportMode importMode, DownloadClientItem downloadClientItem)
         {
-            var cleanedUpName = GetCleanedUpFolderName(directoryInfo.Name);
-            var series = _parsingService.GetSeries(cleanedUpName);
+            var series = GetSeriesFromFolder(directoryInfo);
 
             if (series == null)
             {
-                _logger.Debug("Unknown Series {0}", cleanedUpName);
+                _logger.Debug("Unknown Series {0}", directoryInfo.Name);
 
                 return new List<ImportResult>
                        {
@@ -175,6 +174,73 @@ namespace NzbDrone.Core.MediaFiles
             }
 
             return ProcessFolder(directoryInfo, importMode, series, downloadClientItem);
+        }
+
+        private Series GetSeriesFromFolder(DirectoryInfo directoryInfo)
+        {
+            var cleanedUpName = GetCleanedUpFolderName(directoryInfo.Name);
+
+            try
+            {
+                var series = _parsingService.GetSeries(cleanedUpName);
+
+                if (series != null)
+                {
+                    return series;
+                }
+            }
+            catch (MultipleSeriesFoundException e)
+            {
+                _logger.Warn(e, "Unable to find series from title");
+            }
+
+            var seriesByPath = GetSeriesByPath(directoryInfo.FullName);
+
+            if (seriesByPath != null)
+            {
+                return seriesByPath;
+            }
+
+            var parent = directoryInfo.Parent;
+
+            for (var i = 0; i < 3 && parent != null; i++)
+            {
+                try
+                {
+                    var series = _parsingService.GetSeries(GetCleanedUpFolderName(parent.Name));
+
+                    if (series != null)
+                    {
+                        return series;
+                    }
+                }
+                catch (MultipleSeriesFoundException e)
+                {
+                    _logger.Warn(e, "Unable to find series from ancestor folder title");
+                }
+
+                parent = parent.Parent;
+            }
+
+            return null;
+        }
+
+        private Series GetSeriesByPath(string folder)
+        {
+            var seriesPaths = _seriesService.GetAllSeriesPaths();
+
+            if (seriesPaths == null)
+            {
+                return null;
+            }
+
+            var seriesId = seriesPaths
+                .Where(s => s.Value.PathEquals(folder) || s.Value.IsParentPath(folder))
+                .OrderByDescending(s => s.Value.Length)
+                .Select(s => s.Key)
+                .FirstOrDefault();
+
+            return seriesId > 0 ? _seriesService.GetSeries(seriesId) : null;
         }
 
         private List<ImportResult> ProcessFolder(DirectoryInfo directoryInfo, ImportMode importMode, Series series, DownloadClientItem downloadClientItem)
@@ -244,6 +310,11 @@ namespace NzbDrone.Core.MediaFiles
             {
                 // Try to find series by external ID from filename (e.g., MIKR-058.mp4)
                 series = GetSeriesByExternalId(fileInfo.Name);
+            }
+
+            if (series == null && fileInfo.Directory != null)
+            {
+                series = GetSeriesFromFolder(fileInfo.Directory);
             }
 
             if (series == null)

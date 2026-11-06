@@ -132,6 +132,10 @@ namespace NzbDrone.Core.Parser
                 new Regex(@"^(?<airyear>19[6-9]\d|20\d{2})[-_]?(?<airmonth>[0-1][0-9])[-_]?(?<airday>[0-3][0-9])",
                     RegexOptions.IgnoreCase | RegexOptions.Compiled),
 
+                // Daily episodes with a short month name and airdate before the title (01.SEP.2012.Handwash...)
+                new Regex(@"^(?<airday>[0-3]?[0-9])[-_. ](?<shortairmonth>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-_. ](?<airyear>(19|20)\d{2})(?=$|[-_. ])",
+                    RegexOptions.IgnoreCase | RegexOptions.Compiled),
+
                 // Daily episodes that use short month format instead of number
                 new Regex(@"^(?<title>.+?)[-_. ]+(?<airday>[1-2]\d|3[01]|[1-9])(?:th|st|rd)[-_. ](?<shortairmonth>jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-_. ](?<airyear>(19|20)\d{2})",
                     RegexOptions.IgnoreCase | RegexOptions.Compiled),
@@ -140,12 +144,17 @@ namespace NzbDrone.Core.Parser
                 // [SexMex.xxx] Nicole Zurich (Naughty Little Devil) [2026 г., MILF, Hardcore, 1080p] [733.8 MB]
                 // [FamilySwap.xxx / Nubiles-Porn.com] Emily Jade, Elizabeth Skylar (What Happens When You Ban Halloween - S12:E2) [2026 г., All Sex, 1080p] [2.21 GB]
                 // [DDFBusty.com / DDFProd.com] Angel Wicky:Lingerie Temptations [1080p/06.01.2014 г., Blondes,Big Tits] (tag block may carry a prefix like 1080p/ before the year)
-                new Regex("^\\[(?<sites>[^\\]]+)\\](?<releasetoken>.+?)\\[[ \\w./]*(?<siteyear>(19|20)\\d{2})(?:\\s*\\u0433\\.?)?\\s*(?:,|\\])",
+                new Regex("^(?:\\[(?:\\d{3,4}[pi]|4k|uhd|fullhd|hd)\\][-_. ]*)?\\[(?<sites>[^\\]]+)\\](?<releasetoken>.+?)\\[[ \\w./]*(?<siteyear>(19|20)\\d{2})(?:\\s*[-–]\\s*(?<siteyearlast>(19|20)\\d{2}))?(?:\\s*\\u0433{1,2}\\.?)?\\s*(?:,|\\])",
                     RegexOptions.IgnoreCase | RegexOptions.Compiled),
 
                 // Site release with a bare episode/scene number and no air date
                 // PornFidelity.E1178.Channy.Crossfire.XXX.1080p.HEVC.x265.PRT
                 new Regex(@"^(?<title>.+?)[-_. ]+(?<episodetoken>[Ee](?<episode>\d{2,4}))(?:[-_. ]|$)",
+                    RegexOptions.IgnoreCase | RegexOptions.Compiled),
+
+                // Site-bracketed pack/collection without a year or a full date
+                // [TeenXXXhardcore.com] (6 роликов) ... [Подростковый прон]
+                new Regex(@"^\[(?<sites>[^\]]*\.[a-z0-9-]+[^\]]*)\](?<releasetoken>.+)$",
                     RegexOptions.IgnoreCase | RegexOptions.Compiled)
             };
 
@@ -232,6 +241,19 @@ namespace NzbDrone.Core.Parser
 
         private static readonly Regex SixDigitAirDateRegex = new Regex(@"(?<=^|[\s_.-])(?<airdate>(?<airyear>[1-9]\d{1})(?<airmonth>[0-1][0-9])(?<airday>[0-3][0-9]))(?=$|[\s_.-])",
                                                                         RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        private static readonly Regex BracketBlockRegex = new Regex(@"\[(?<content>[^\]]+)\]", RegexOptions.Compiled);
+        private static readonly Regex YearRangeRegex = new Regex(@"(?<![0-9])(?<first>(19|20)\d{2})\s*[-–]\s*(?<last>(19|20)\d{2})(?![0-9])", RegexOptions.Compiled);
+        private static readonly Regex YearRegex = new Regex(@"(?<![0-9])(?<year>(19|20)\d{2})(?![0-9])", RegexOptions.Compiled);
+        private static readonly Regex SiteDomainRegex = new Regex(@"\b[a-z0-9][a-z0-9-]*\.(?:com|net|org|tv|xxx|io|info|gg|co|me)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex SceneIdRegex = new Regex(@"(?<![A-Za-z0-9])(?<id>E\d{2,5}|#\d{1,6})(?![A-Za-z0-9])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex SceneIdRangeRegex = new Regex(@"(?<![A-Za-z0-9])E(?<from>\d{2,5})\s*[-–]\s*(?:E)?(?<to>\d{2,5})(?![A-Za-z0-9])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex NumericIdListRegex = new Regex(@"\((?<nums>\d{3,7}(?:\s*[/,]\s*\d{3,7})+)\)", RegexOptions.Compiled);
+        private static readonly Regex PerformerSeparatorRegex = new Regex(@"\s*(?:,|&|\band\b)\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex AkaAliasRegex = new Regex(@"^(?<primary>.+?)\s+aka\s+(?<alias>.+)$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex CollectionCountRegex = new Regex(@"\b\d+\s*(?:movies|scenes|videos|clips|эпизодов|роликов|серий)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex CollectionMarkerRegex = new Regex(@"\b(?:siterip|site\s*rip|pack|collection)\b|серии\s*\d+\s*[-–]\s*\d+|пак", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex FullDateRegex = new Regex(@"(?<![0-9])(19|20)\d{2}[-_.](0?[1-9]|1[0-2])[-_.](0?[1-9]|[12]\d|3[01])(?![0-9])", RegexOptions.Compiled);
 
         private static readonly RegexReplace CleanReleaseGroupRegex = new RegexReplace(@"^(.*?[-._ ](S\d+E\d+)[-._ ])|(-(RP|1|NZBGeek|\[N-Z-B\]|Obfuscated|Scrambled|sample|Pre|postbot|xpost|Rakuv[a-z0-9]*|WhiteRev|BUYMORE|AsRequested|AlternativeToRequested|GEROV|Z0iDS3N|Chamele0n|4P|4Planet|AlteZachen|RePACKPOST))+$",
                                                                 string.Empty,
@@ -832,7 +854,7 @@ namespace NzbDrone.Core.Parser
                 return candidates;
             }
 
-            foreach (var raw in sites.Split('/'))
+            foreach (var raw in Regex.Split(sites, @"[/|,&]"))
             {
                 var part = raw.Trim();
 
@@ -841,7 +863,9 @@ namespace NzbDrone.Core.Parser
                     continue;
                 }
 
+                part = Regex.Replace(part, @"^[a-z]+://", string.Empty, RegexOptions.IgnoreCase);
                 part = Regex.Replace(part, @"^www\.", string.Empty, RegexOptions.IgnoreCase);
+                part = part.Split('?')[0].Split('#')[0].Trim(' ', '/', '.', '_');
 
                 var dot = part.IndexOf('.');
 
@@ -852,13 +876,364 @@ namespace NzbDrone.Core.Parser
 
                 part = part.Trim().Trim('_', '-', ' ');
 
-                if (!part.IsNullOrWhiteSpace() && !candidates.Contains(part, StringComparer.OrdinalIgnoreCase))
+                if (!part.IsNullOrWhiteSpace() &&
+                    !Regex.IsMatch(part, @"^(?:\d{3,4}[pi]|4k|uhd|fullhd|hd)$", RegexOptions.IgnoreCase) &&
+                    !candidates.Contains(part, StringComparer.OrdinalIgnoreCase))
                 {
                     candidates.Add(part);
                 }
             }
 
             return candidates;
+        }
+
+        private static void PopulateSiteYearMetadata(ParsedEpisodeInfo result, MatchCollection matchCollection, string releaseTitle)
+        {
+            var sitesGroup = matchCollection[0].Groups["sites"];
+            string sitesText = null;
+
+            if (sitesGroup.Success)
+            {
+                sitesText = sitesGroup.Value;
+            }
+            else
+            {
+                var titleGroup = matchCollection[0].Groups["title"];
+
+                if (titleGroup.Success && SiteDomainRegex.IsMatch(titleGroup.Value))
+                {
+                    sitesText = titleGroup.Value;
+                }
+            }
+
+            if (sitesText.IsNotNullOrWhiteSpace())
+            {
+                result.Sites = ParseSiteDomainCandidates(sitesText);
+                var candidates = ParseSiteCandidates(sitesText);
+
+                if (candidates.Count > 0)
+                {
+                    if (result.SeriesTitle.IsNullOrWhiteSpace())
+                    {
+                        result.SeriesTitle = candidates[0];
+                    }
+
+                    result.SeriesTitleCandidates ??= new List<string>();
+
+                    foreach (var candidate in candidates)
+                    {
+                        if (!result.SeriesTitleCandidates.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+                        {
+                            result.SeriesTitleCandidates.Add(candidate);
+                        }
+                    }
+                }
+            }
+
+            var years = ExtractYears(releaseTitle, result.SeasonNumber);
+
+            if (years.Count > 0)
+            {
+                result.Year = years.First();
+                result.YearLast = years.Last();
+
+                if (result.SeasonNumber <= 0)
+                {
+                    result.SeasonNumber = result.Year.Value;
+                }
+            }
+
+            var tokens = result.ReleaseTokens?.Trim().Trim('-', ' ', '.', '_');
+
+            if (tokens.IsNotNullOrWhiteSpace())
+            {
+                ExtractPerformersAndSceneTitle(result, tokens);
+                result.SceneIds = ExtractSceneIds(releaseTitle);
+                result.IsCollection = IsCollectionRelease(releaseTitle, result.SceneIds);
+            }
+
+            if (result.Year.HasValue &&
+                !result.UseYearAsSeason &&
+                result.SeasonNumber <= 0 &&
+                result.AirDate.IsNullOrWhiteSpace() &&
+                result.EpisodeToken.IsNullOrWhiteSpace())
+            {
+                result.SeasonNumber = result.Year.Value;
+                result.UseYearAsSeason = true;
+            }
+        }
+
+        private static List<string> ParseSiteDomainCandidates(string sites)
+        {
+            var candidates = new List<string>();
+
+            if (sites.IsNullOrWhiteSpace())
+            {
+                return candidates;
+            }
+
+            foreach (var raw in Regex.Split(sites, @"[/|,&]"))
+            {
+                var part = raw.Trim();
+
+                if (part.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+
+                part = Regex.Replace(part, @"^[a-z]+://", string.Empty, RegexOptions.IgnoreCase);
+                part = Regex.Replace(part, @"^www\.", string.Empty, RegexOptions.IgnoreCase);
+                part = part.Split('?')[0].Split('#')[0].Trim(' ', '/', '.', '_');
+
+                if (part.IsNotNullOrWhiteSpace() &&
+                    SiteDomainRegex.IsMatch(part) &&
+                    !candidates.Contains(part, StringComparer.OrdinalIgnoreCase))
+                {
+                    candidates.Add(part);
+                }
+            }
+
+            return candidates;
+        }
+
+        private static List<int> ExtractYears(string releaseTitle, int seasonNumber)
+        {
+            var years = new HashSet<int>();
+
+            if (releaseTitle.IsNotNullOrWhiteSpace())
+            {
+                foreach (Match bracket in BracketBlockRegex.Matches(releaseTitle))
+                {
+                    var content = bracket.Groups["content"].Value;
+
+                    if (SiteDomainRegex.IsMatch(content))
+                    {
+                        continue;
+                    }
+
+                    foreach (Match range in YearRangeRegex.Matches(content))
+                    {
+                        AddYear(years, range.Groups["first"].Value);
+                        AddYear(years, range.Groups["last"].Value);
+                    }
+
+                    foreach (Match year in YearRegex.Matches(content))
+                    {
+                        AddYear(years, year.Groups["year"].Value);
+                    }
+                }
+
+                if (years.Count == 0)
+                {
+                    foreach (Match year in YearRegex.Matches(releaseTitle))
+                    {
+                        AddYear(years, year.Groups["year"].Value);
+                    }
+                }
+            }
+
+            if (seasonNumber > 1900 && seasonNumber <= DateTime.Now.AddDays(1).Year)
+            {
+                years.Add(seasonNumber);
+            }
+
+            return years.Where(y => y >= 1900 && y <= DateTime.Now.AddDays(1).Year)
+                        .OrderBy(y => y)
+                        .ToList();
+        }
+
+        private static void AddYear(HashSet<int> years, string value)
+        {
+            if (int.TryParse(value, out var year))
+            {
+                years.Add(year);
+            }
+        }
+
+        private static void ExtractPerformersAndSceneTitle(ParsedEpisodeInfo result, string tokens)
+        {
+            tokens = tokens.Trim().Trim('-', ' ', '.', '_', ':');
+
+            if (tokens.IsNullOrWhiteSpace())
+            {
+                return;
+            }
+
+            var parenthesized = Regex.Match(tokens, @"^(?<left>.+?)\s*\((?<title>[^()]+)\)\s*$");
+
+            if (parenthesized.Success)
+            {
+                AddPerformers(result, parenthesized.Groups["left"].Value);
+                result.SceneTitle = CleanSceneTitle(parenthesized.Groups["title"].Value);
+                return;
+            }
+
+            var dashed = Regex.Match(tokens, @"^(?<left>.+?)\s+[-–]\s+(?<title>.+)$");
+
+            if (dashed.Success)
+            {
+                AddPerformers(result, dashed.Groups["left"].Value);
+                result.SceneTitle = CleanSceneTitle(dashed.Groups["title"].Value);
+                return;
+            }
+
+            var slash = Regex.Match(tokens, @"^(?<title>.+?)\s*/\s*(?<alternate>.+)$");
+
+            if (slash.Success)
+            {
+                result.SceneTitle = CleanSceneTitle(slash.Groups["title"].Value);
+                return;
+            }
+
+            var titleOnly = Regex.Match(tokens, @"^\((?<title>.+)\)$");
+
+            if (titleOnly.Success)
+            {
+                result.SceneTitle = CleanSceneTitle(titleOnly.Groups["title"].Value);
+                return;
+            }
+
+            result.SceneTitle = CleanSceneTitle(tokens);
+        }
+
+        private static void AddPerformers(ParsedEpisodeInfo result, string performers)
+        {
+            if (performers.IsNullOrWhiteSpace())
+            {
+                return;
+            }
+
+            foreach (var raw in PerformerSeparatorRegex.Split(performers))
+            {
+                var name = raw.Trim().Trim('"', '\'', ' ', '-', '_');
+
+                if (name.IsNullOrWhiteSpace())
+                {
+                    continue;
+                }
+
+                var alias = AkaAliasRegex.Match(name);
+
+                if (alias.Success)
+                {
+                    AddPerformer(result, alias.Groups["primary"].Value);
+                    AddPerformer(result, alias.Groups["alias"].Value);
+                }
+                else
+                {
+                    AddPerformer(result, name);
+                }
+            }
+        }
+
+        private static void AddPerformer(ParsedEpisodeInfo result, string performer)
+        {
+            performer = Regex.Replace(performer.Trim().Trim('"', '\'', ' ', '-', '_'), @"\s+", " ");
+
+            if (performer.IsNullOrWhiteSpace() || performer.Equals("and", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (result.Performers == null)
+            {
+                result.Performers = new List<string>();
+            }
+
+            if (!result.Performers.Contains(performer, StringComparer.OrdinalIgnoreCase))
+            {
+                result.Performers.Add(performer);
+            }
+        }
+
+        private static string CleanSceneTitle(string title)
+        {
+            title = Regex.Replace(title.Trim().Trim('-', ' ', '.', '_', ':'), @"\s+", " ");
+
+            return title.IsNullOrWhiteSpace() ? null : title;
+        }
+
+        private static List<string> ExtractSceneIds(string releaseTitle)
+        {
+            var ids = new List<string>();
+
+            if (releaseTitle.IsNullOrWhiteSpace())
+            {
+                return ids;
+            }
+
+            foreach (Match match in SceneIdRegex.Matches(releaseTitle))
+            {
+                AddSceneId(ids, match.Value);
+            }
+
+            foreach (Match match in SceneIdRangeRegex.Matches(releaseTitle))
+            {
+                if (int.TryParse(match.Groups["from"].Value, out var from) &&
+                    int.TryParse(match.Groups["to"].Value, out var to) &&
+                    to >= from &&
+                    to - from <= 200)
+                {
+                    for (var id = from; id <= to; id++)
+                    {
+                        AddSceneId(ids, $"E{id}");
+                    }
+                }
+            }
+
+            foreach (Match match in NumericIdListRegex.Matches(releaseTitle))
+            {
+                foreach (var part in match.Groups["nums"].Value.Split(new[] { '/', ',' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    AddSceneId(ids, $"#{part.Trim()}");
+                }
+            }
+
+            return ids;
+        }
+
+        private static void AddSceneId(List<string> ids, string id)
+        {
+            id = id.Trim();
+
+            if (id.IsNullOrWhiteSpace())
+            {
+                return;
+            }
+
+            var digits = new string(id.Where(char.IsDigit).ToArray());
+
+            if (digits.Length == 4 && int.TryParse(digits, out var numericYear) && numericYear >= 1900 && numericYear <= DateTime.Now.AddDays(1).Year)
+            {
+                return;
+            }
+
+            if (!ids.Contains(id, StringComparer.OrdinalIgnoreCase))
+            {
+                ids.Add(id);
+            }
+        }
+
+        private static bool IsCollectionRelease(string releaseTitle, List<string> sceneIds)
+        {
+            if (releaseTitle.IsNullOrWhiteSpace())
+            {
+                return sceneIds.Count > 1;
+            }
+
+            if (SceneIdRangeRegex.IsMatch(releaseTitle) ||
+                CollectionCountRegex.IsMatch(releaseTitle) ||
+                CollectionMarkerRegex.IsMatch(releaseTitle))
+            {
+                return true;
+            }
+
+            if (sceneIds.Count > 1)
+            {
+                return true;
+            }
+
+            return FullDateRegex.Matches(releaseTitle).Count > 1;
         }
 
         private static SeriesTitleInfo GetSeriesTitleInfo(string title)
@@ -944,6 +1319,7 @@ namespace NzbDrone.Core.Parser
                     int.TryParse(matchCollection[0].Groups["siteyear"].Value, out var siteYear))
                 {
                     result.SeasonNumber = siteYear;
+                    result.UseYearAsSeason = true;
 
                     var siteCandidates = ParseSiteCandidates(matchCollection[0].Groups["sites"].Value);
 
@@ -1032,6 +1408,10 @@ namespace NzbDrone.Core.Parser
                 {
                     lastSeasonEpisodeStringIndex = Math.Max(lastSeasonEpisodeStringIndex, matchCollection[0].Groups["airmonthname"].EndIndex());
                 }
+                else if (matchCollection[0].Groups["shortairmonth"].Success)
+                {
+                    lastSeasonEpisodeStringIndex = Math.Max(lastSeasonEpisodeStringIndex, matchCollection[0].Groups["shortairmonth"].EndIndex());
+                }
                 else
                 {
                     lastSeasonEpisodeStringIndex = Math.Max(lastSeasonEpisodeStringIndex, matchCollection[0].Groups["airmonth"].EndIndex());
@@ -1103,6 +1483,17 @@ namespace NzbDrone.Core.Parser
                 {
                     result.SeriesTitle = seriesName;
                 }
+            }
+
+            PopulateSiteYearMetadata(result, matchCollection, releaseTitle);
+
+            if (result.AirDate.IsNullOrWhiteSpace() &&
+                !result.Year.HasValue &&
+                result.SeasonNumber <= 0 &&
+                result.EpisodeToken.IsNullOrWhiteSpace() &&
+                !result.IsCollection)
+            {
+                return null;
             }
 
             result.SeriesTitleInfo = GetSeriesTitleInfo(result.SeriesTitle);

@@ -49,6 +49,30 @@ namespace NzbDrone.Core.Test.MediaFiles
         }
 
         [Test]
+        public void get_files_by_file_name()
+        {
+            var files = Builder<EpisodeFile>.CreateListOfSize(3)
+                .All()
+                .With(c => c.Id = 0)
+                .With(c => c.RelativePath = "Other.mkv")
+                .With(c => c.SceneName = null)
+                .With(c => c.OriginalFilePath = null)
+                .With(c => c.Quality = new QualityModel(Quality.Bluray720p))
+                .With(c => c.Languages = new List<Language> { Language.English })
+                .TheFirst(1)
+                .With(c => c.RelativePath = "Folder/Scene.Name.2023.01.15.1080p.mp4")
+                .TheNext(1)
+                .With(c => c.RelativePath = "Scene.Name.2023.01.15.1080p.mp4")
+                .BuildListOfNew();
+
+            Db.InsertMany(files);
+
+            var matches = Subject.GetFilesByFileName("Scene.Name.2023.01.15.1080p.mp4");
+
+            matches.Should().HaveCount(2);
+        }
+
+        [Test]
         public void should_delete_files_by_seriesId()
         {
             var items = Builder<EpisodeFile>.CreateListOfSize(5)
