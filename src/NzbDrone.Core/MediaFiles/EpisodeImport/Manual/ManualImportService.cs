@@ -230,9 +230,7 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
 
         private List<ManualImportItem> ProcessFolder(string rootFolder, string baseFolder, string downloadId, int? seriesId, bool filterExistingFiles)
         {
-            DownloadClientItem downloadClientItem = null;
             Series series = null;
-            TrackedDownload trackedDownload = null;
 
             var directoryInfo = new DirectoryInfo(baseFolder);
 
@@ -242,18 +240,13 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
             }
             else
             {
-                series = GetSeriesFromFolder(directoryInfo);
+                series = GetSeriesFromFolder(directoryInfo, false);
             }
 
-            if (downloadId.IsNotNullOrWhiteSpace())
+            if (downloadId.IsNotNullOrWhiteSpace() && series == null)
             {
-                trackedDownload = _trackedDownloadService.Find(downloadId);
-                downloadClientItem = trackedDownload.DownloadItem;
-
-                if (series == null)
-                {
-                    series = trackedDownload.RemoteEpisode?.Series;
-                }
+                var trackedDownload = _trackedDownloadService.Find(downloadId);
+                series = trackedDownload?.RemoteEpisode?.Series;
             }
 
             if (series == null)
@@ -273,7 +266,7 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
 
                 var subfolders = _diskScanService.FilterPaths(rootFolder, _diskProvider.GetDirectories(baseFolder));
 
-                var processedFiles = files.Select(file => ProcessFile(rootFolder, baseFolder, file, downloadId));
+                var processedFiles = files.Select(file => ProcessFile(rootFolder, baseFolder, file, downloadId, null, filterExistingFiles));
                 var processedFolders = subfolders.SelectMany(subfolder => ProcessFolder(rootFolder, subfolder, downloadId, null, filterExistingFiles));
 
                 return processedFiles.Concat(processedFolders).Where(i => i != null).ToList();
@@ -281,17 +274,13 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
 
             var folderInfo = Parser.Parser.ParseTitle(directoryInfo.Name);
             var seriesFiles = _diskScanService.FilterPaths(rootFolder, _diskScanService.GetVideoFiles(baseFolder).ToList());
-            var decisions = _importDecisionMaker.GetImportDecisions(seriesFiles, series, downloadClientItem, folderInfo, SceneSource(series, baseFolder), filterExistingFiles);
 
-            foreach (var decision in decisions)
-            {
-                decision.LocalEpisode.IndexerFlags = trackedDownload?.RemoteEpisode?.Release?.IndexerFlags ?? 0;
-            }
-
-            return decisions.Select(decision => MapItem(decision, rootFolder, downloadId, directoryInfo.Name)).ToList();
+            return seriesFiles.Select(file => ProcessFile(rootFolder, baseFolder, file, downloadId, null, filterExistingFiles, folderInfo, directoryInfo.Name))
+                              .Where(item => item != null)
+                              .ToList();
         }
 
-        private Series GetSeriesFromFolder(DirectoryInfo directoryInfo)
+        private Series GetSeriesFromFolder(DirectoryInfo directoryInfo, bool allowAncestors)
         {
             try
             {
@@ -314,7 +303,7 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
                 return seriesByPath;
             }
 
-            return GetSeriesByAncestorFolder(directoryInfo);
+            return allowAncestors ? GetSeriesByAncestorFolder(directoryInfo) : null;
         }
 
         private Series GetSeriesByPath(string folder)
@@ -361,12 +350,17 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
             return null;
         }
 
-        private ManualImportItem ProcessFile(string rootFolder, string baseFolder, string file, string downloadId, Series series = null)
+        private ManualImportItem ProcessFile(string rootFolder, string baseFolder, string file, string downloadId, Series series = null, bool filterExistingFiles = true, ParsedEpisodeInfo folderInfo = null, string folderName = null)
         {
             try
             {
                 var trackedDownload = GetTrackedDownload(downloadId);
                 var relativeFile = baseFolder.GetRelativePath(file);
+
+                if (series == null)
+                {
+                    series = _parsingService.GetSeries(Path.GetFileNameWithoutExtension(file));
+                }
 
                 if (series == null)
                 {
@@ -395,6 +389,16 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
 
                 if (series == null)
                 {
+                    var fileDirectory = Path.GetDirectoryName(file);
+
+                    if (fileDirectory.IsNotNullOrWhiteSpace())
+                    {
+                        series = GetSeriesFromFolder(new DirectoryInfo(fileDirectory), true);
+                    }
+                }
+
+                if (series == null)
+                {
                     var localEpisode = new LocalEpisode();
                     localEpisode.Path = file;
                     localEpisode.ReleaseGroup = Parser.Parser.ParseReleaseGroup(file);
@@ -406,21 +410,22 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
                         new ImportRejection(ImportRejectionReason.UnknownSeries, "Unknown Series")),
                         rootFolder,
                         downloadId,
-                        null);
+                        folderName);
                 }
 
                 var importDecisions = _importDecisionMaker.GetImportDecisions(new List<string> { file },
                     series,
                     trackedDownload?.DownloadItem,
-                    null,
-                    SceneSource(series, baseFolder));
+                    folderInfo,
+                    SceneSource(series, baseFolder),
+                    filterExistingFiles);
 
                 if (importDecisions.Any())
                 {
                     var importDecision = importDecisions.First();
                     importDecision.LocalEpisode.IndexerFlags = trackedDownload?.RemoteEpisode?.Release?.IndexerFlags ?? 0;
 
-                    return MapItem(importDecision, rootFolder, downloadId, null);
+                    return MapItem(importDecision, rootFolder, downloadId, folderName);
                 }
             }
             catch (Exception ex)

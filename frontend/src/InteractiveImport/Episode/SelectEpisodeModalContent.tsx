@@ -226,7 +226,18 @@ function SelectEpisodeModalContent(props: SelectEpisodeModalContentProps) {
             >
               <TableBody>
                 {items.map((item) => {
-                  return item.title.toLowerCase().includes(filter) ? (
+                  const matchesFilter =
+                    item.title.toLowerCase().includes(filter) ||
+                    (item.actors ?? []).some((actor) => {
+                      return (
+                        (actor.character ?? '')
+                          .toLowerCase()
+                          .includes(filter) ||
+                        (actor.name ?? '').toLowerCase().includes(filter)
+                      );
+                    });
+
+                  return matchesFilter ? (
                     <SelectEpisodeRow
                       key={item.id}
                       id={item.id}
