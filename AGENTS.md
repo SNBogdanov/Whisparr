@@ -5,11 +5,12 @@ the fork evolves.
 
 ## Repo / remotes
 
-- Branch: `v2-develop`
+- Branch: `main` — the only branch in the fork and the GitHub default.
 - `origin` = https://github.com/SNBogdanov/Whisparr.git (fork)
-- `upstream` = https://github.com/Whisparr/Whisparr.git
-- Fork is a small set of commits on top of upstream `v2-develop`
-  (base/merge-base was `c55fdc66a`). Divergence is documented in `CHANGELOG.md`.
+- There is intentionally **no `upstream` remote**. The fork is maintained
+  independently of `Whisparr/Whisparr`; do not add one unless explicitly asked.
+- The fork history includes upstream commits up to the former base
+  (`c55fdc66a`). Divergence is documented in `CHANGELOG.md`.
 - **Never commit, amend, push, or create PRs unless the user explicitly asks.**
   When asked, first check `git status`, `git diff`, `git log --oneline -10`.
 
