@@ -646,6 +646,14 @@ namespace NzbDrone.Core.Tv
                     }
                 }
 
+                if (cleanTitle.IsNotNullOrWhiteSpace() &&
+                    IsTitleCoverageMatch(parsedEpisodeTitle, cleanTitle) &&
+                    (isBTS == isEpisodeBTS))
+                {
+                    matches.Add(episode);
+                    continue;
+                }
+
                 if (matchLevel > 2)
                 {
                     continue;
@@ -705,6 +713,34 @@ namespace NzbDrone.Core.Tv
             }
 
             return matches;
+        }
+
+        private static readonly HashSet<string> TitleStopWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "the", "and", "for", "with", "from", "this", "that", "your", "you", "are", "was", "not",
+            "but", "his", "her", "all", "into", "out", "off", "over", "under", "part", "vol", "xxx"
+        };
+
+        private static bool IsTitleCoverageMatch(string releaseText, string episodeTitle)
+        {
+            var episodeTokens = GetSignificantTitleTokens(episodeTitle);
+            var releaseTokens = GetSignificantTitleTokens(releaseText);
+
+            if (episodeTokens.Count < 2 || releaseTokens.Count == 0)
+            {
+                return false;
+            }
+
+            var matched = episodeTokens.Count(releaseTokens.Contains);
+
+            return matched >= 2 && (double)matched / episodeTokens.Count >= 0.60;
+        }
+
+        private static HashSet<string> GetSignificantTitleTokens(string text)
+        {
+            return text.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                       .Where(token => token.Length > 2 && !TitleStopWords.Contains(token) && !token.All(char.IsDigit))
+                       .ToHashSet(StringComparer.OrdinalIgnoreCase);
         }
     }
 }

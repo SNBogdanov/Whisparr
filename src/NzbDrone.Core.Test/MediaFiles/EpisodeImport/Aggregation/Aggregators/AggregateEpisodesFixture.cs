@@ -96,7 +96,7 @@ namespace NzbDrone.Core.Test.MediaFiles.EpisodeImport.Aggregation.Aggregators
         [Test]
         public void should_use_folder_when_only_one_video_file()
         {
-            var fileEpisodeInfo = Parser.Parser.ParseTitle("Series.Title.23.01.15");
+            var fileEpisodeInfo = Parser.Parser.ParseTitle("Series.Title");
             var folderEpisodeInfo = Parser.Parser.ParseTitle("Series.Title.23.01.15");
             var localEpisode = new LocalEpisode
             {
@@ -110,6 +110,25 @@ namespace NzbDrone.Core.Test.MediaFiles.EpisodeImport.Aggregation.Aggregators
 
             Mocker.GetMock<IParsingService>()
                   .Verify(v => v.GetEpisodes(folderEpisodeInfo, _series, localEpisode.SceneSource, null), Times.Once());
+        }
+
+        [Test]
+        public void should_use_file_when_folder_name_is_a_date_range()
+        {
+            var fileEpisodeInfo = Parser.Parser.ParseTitle("Bad MILFs - 2025-10-12 - Help Stretch Me Out Mia's Slutty Seductive Yoga Mom [WEBDL-1080p] x265 (HD).mp4");
+            var folderEpisodeInfo = Parser.Parser.ParseTitle("BadMilfs.03.01.2024-28.12.2025");
+            var localEpisode = new LocalEpisode
+            {
+                FileEpisodeInfo = fileEpisodeInfo,
+                FolderEpisodeInfo = folderEpisodeInfo,
+                Path = @"C:\Test\Unsorted\BadMilfs.03.01.2024-28.12.2025\Bad MILFs - 2025-10-12 - Help Stretch Me Out.mp4".AsOsAgnostic(),
+                Series = _series
+            };
+
+            Subject.Aggregate(localEpisode, null);
+
+            Mocker.GetMock<IParsingService>()
+                  .Verify(v => v.GetEpisodes(fileEpisodeInfo, _series, localEpisode.SceneSource, null), Times.Once());
         }
 
         [Test]

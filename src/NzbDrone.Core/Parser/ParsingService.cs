@@ -89,6 +89,11 @@ namespace NzbDrone.Core.Parser
                                                    parsedEpisodeInfo.SeriesTitleInfo.Year);
             }
 
+            if (series == null && parsedEpisodeInfo.SeriesTitle.IsNotNullOrWhiteSpace())
+            {
+                series = _seriesService.FindByTitleSlug(parsedEpisodeInfo.SeriesTitle);
+            }
+
             if (series == null)
             {
                 series = FindSeriesBySiteTokens(parsedEpisodeInfo?.SeriesTitleCandidates, title);

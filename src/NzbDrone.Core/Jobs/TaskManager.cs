@@ -124,6 +124,12 @@ namespace NzbDrone.Core.Jobs
                     {
                         Interval = GetRssSyncInterval(),
                         TypeName = typeof(RssSyncCommand).FullName
+                    },
+
+                    new ScheduledTask
+                    {
+                        Interval = GetImportIncompleteInterval(),
+                        TypeName = typeof(ImportIncompleteCommand).FullName
                     }
                 };
 
@@ -175,6 +181,18 @@ namespace NzbDrone.Core.Jobs
             return intervalMinutes * 60 * 24;
         }
 
+        private int GetImportIncompleteInterval()
+        {
+            if (!_configService.ImportIncompleteEnabled || !_configService.ImportIncompleteScheduled)
+            {
+                return 0;
+            }
+
+            var interval = _configService.ImportIncompleteScheduleInterval;
+
+            return interval < 1 ? 1 : interval;
+        }
+
         private int GetRssSyncInterval()
         {
             var interval = _configService.RssSyncInterval;
@@ -220,10 +238,30 @@ namespace NzbDrone.Core.Jobs
             var backup = _scheduledTaskRepository.GetDefinition(typeof(BackupCommand));
             backup.Interval = GetBackupInterval();
 
-            _scheduledTaskRepository.UpdateMany(new List<ScheduledTask> { rss, backup });
+            var tasks = new List<ScheduledTask> { rss, backup };
+            var incomplete = _scheduledTaskRepository.All()
+                                                    .SingleOrDefault(c => c.TypeName == typeof(ImportIncompleteCommand).FullName);
+
+            if (incomplete != null)
+            {
+                incomplete.Interval = GetImportIncompleteInterval();
+                tasks.Add(incomplete);
+            }
+
+            _scheduledTaskRepository.UpdateMany(tasks);
 
             _cache.Find(rss.TypeName).Interval = rss.Interval;
             _cache.Find(backup.TypeName).Interval = backup.Interval;
+
+            if (incomplete != null)
+            {
+                var cachedIncomplete = _cache.Find(incomplete.TypeName);
+
+                if (cachedIncomplete != null)
+                {
+                    cachedIncomplete.Interval = incomplete.Interval;
+                }
+            }
         }
     }
 }

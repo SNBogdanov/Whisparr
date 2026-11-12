@@ -22,4 +22,10 @@ export default interface MediaManagement {
   extraFileExtensions: string;
   userRejectedExtensions: string;
   enableMediaInfo: boolean;
+  importIncompleteEnabled: boolean;
+  importIncompleteFolder: string;
+  importIncompleteAfterRefresh: boolean;
+  importIncompleteScheduled: boolean;
+  importIncompleteScheduleInterval: number;
+  importIncompleteRefreshDelay: number;
 }

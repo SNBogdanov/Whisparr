@@ -33,6 +33,13 @@ namespace Whisparr.Api.V3.Config
         public string ExtraFileExtensions { get; set; }
         public bool EnableMediaInfo { get; set; }
         public string UserRejectedExtensions { get; set; }
+
+        public bool ImportIncompleteEnabled { get; set; }
+        public string ImportIncompleteFolder { get; set; }
+        public bool ImportIncompleteAfterRefresh { get; set; }
+        public bool ImportIncompleteScheduled { get; set; }
+        public int ImportIncompleteScheduleInterval { get; set; }
+        public int ImportIncompleteRefreshDelay { get; set; }
     }
 
     public static class MediaManagementConfigResourceMapper
@@ -65,7 +72,14 @@ namespace Whisparr.Api.V3.Config
                 ImportExtraFiles = model.ImportExtraFiles,
                 ExtraFileExtensions = model.ExtraFileExtensions,
                 EnableMediaInfo = model.EnableMediaInfo,
-                UserRejectedExtensions = model.UserRejectedExtensions
+                UserRejectedExtensions = model.UserRejectedExtensions,
+
+                ImportIncompleteEnabled = model.ImportIncompleteEnabled,
+                ImportIncompleteFolder = model.ImportIncompleteFolder,
+                ImportIncompleteAfterRefresh = model.ImportIncompleteAfterRefresh,
+                ImportIncompleteScheduled = model.ImportIncompleteScheduled,
+                ImportIncompleteScheduleInterval = model.ImportIncompleteScheduleInterval,
+                ImportIncompleteRefreshDelay = model.ImportIncompleteRefreshDelay
             };
         }
     }

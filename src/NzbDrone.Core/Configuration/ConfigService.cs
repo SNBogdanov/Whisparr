@@ -280,6 +280,42 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("UserRejectedExtensions", value); }
         }
 
+        public bool ImportIncompleteEnabled
+        {
+            get { return GetValueBoolean("ImportIncompleteEnabled", true); }
+            set { SetValue("ImportIncompleteEnabled", value); }
+        }
+
+        public string ImportIncompleteFolder
+        {
+            get { return GetValue("ImportIncompleteFolder", "/share/Video/Incomplete/Whisparr"); }
+            set { SetValue("ImportIncompleteFolder", value); }
+        }
+
+        public bool ImportIncompleteAfterRefresh
+        {
+            get { return GetValueBoolean("ImportIncompleteAfterRefresh", true); }
+            set { SetValue("ImportIncompleteAfterRefresh", value); }
+        }
+
+        public bool ImportIncompleteScheduled
+        {
+            get { return GetValueBoolean("ImportIncompleteScheduled", false); }
+            set { SetValue("ImportIncompleteScheduled", value); }
+        }
+
+        public int ImportIncompleteScheduleInterval
+        {
+            get { return GetValueInt("ImportIncompleteScheduleInterval", 15); }
+            set { SetValue("ImportIncompleteScheduleInterval", value); }
+        }
+
+        public int ImportIncompleteRefreshDelay
+        {
+            get { return GetValueInt("ImportIncompleteRefreshDelay", 60); }
+            set { SetValue("ImportIncompleteRefreshDelay", value); }
+        }
+
         public bool SetPermissionsLinux
         {
             get { return GetValueBoolean("SetPermissionsLinux", false); }
@@ -301,39 +337,83 @@ namespace NzbDrone.Core.Configuration
             set { SetValue("ChownGroup", value); }
         }
 
+        private bool IsRussianUi => UILanguage == Language.Russian.Id;
+
         public int FirstDayOfWeek
         {
-            get { return GetValueInt("FirstDayOfWeek", (int)CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek); }
+            get
+            {
+                var defaultDay = IsRussianUi
+                    ? (int)DayOfWeek.Monday
+                    : (int)CultureInfo.CurrentCulture.DateTimeFormat.FirstDayOfWeek;
 
-            set { SetValue("FirstDayOfWeek", value); }
+                return GetValueInt("FirstDayOfWeek", defaultDay);
+            }
+
+            set
+            {
+                SetValue("FirstDayOfWeek", value);
+            }
         }
 
         public string CalendarWeekColumnHeader
         {
-            get { return GetValue("CalendarWeekColumnHeader", "ddd M/D"); }
+            get
+            {
+                var value = GetValue("CalendarWeekColumnHeader", IsRussianUi ? "ddd D/M" : "ddd M/D");
 
-            set { SetValue("CalendarWeekColumnHeader", value); }
+                return IsRussianUi && value == "ddd M/D" ? "ddd D/M" : value;
+            }
+
+            set
+            {
+                SetValue("CalendarWeekColumnHeader", value);
+            }
         }
 
         public string ShortDateFormat
         {
-            get { return GetValue("ShortDateFormat", "MMM D YYYY"); }
+            get
+            {
+                var value = GetValue("ShortDateFormat", IsRussianUi ? "DD.MM.YYYY" : "MMM D YYYY");
 
-            set { SetValue("ShortDateFormat", value); }
+                return IsRussianUi && value == "MMM D YYYY" ? "DD.MM.YYYY" : value;
+            }
+
+            set
+            {
+                SetValue("ShortDateFormat", value);
+            }
         }
 
         public string LongDateFormat
         {
-            get { return GetValue("LongDateFormat", "dddd, MMMM D YYYY"); }
+            get
+            {
+                var value = GetValue("LongDateFormat", IsRussianUi ? "D MMMM YYYY" : "dddd, MMMM D YYYY");
 
-            set { SetValue("LongDateFormat", value); }
+                return IsRussianUi && value == "dddd, MMMM D YYYY" ? "D MMMM YYYY" : value;
+            }
+
+            set
+            {
+                SetValue("LongDateFormat", value);
+            }
         }
 
         public string TimeFormat
         {
-            get { return GetValue("TimeFormat", "h(:mm)a"); }
+            get
+            {
+                var value = GetValue("TimeFormat", IsRussianUi ? "HH:mm" : "h(:mm)a");
 
-            set { SetValue("TimeFormat", value); }
+                return IsRussianUi && value == "h(:mm)a" ? "HH:mm" : value;
+            }
+
+            set
+            {
+                SetValue("TimeFormat", value);
+            }
         }
 
         public bool ShowRelativeDates

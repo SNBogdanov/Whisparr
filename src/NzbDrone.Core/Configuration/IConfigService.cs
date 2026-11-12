@@ -44,6 +44,14 @@ namespace NzbDrone.Core.Configuration
         int DefaultQuality { get; set; }
         string UserRejectedExtensions { get; set; }
 
+        // Incomplete folder auto-import
+        bool ImportIncompleteEnabled { get; set; }
+        string ImportIncompleteFolder { get; set; }
+        bool ImportIncompleteAfterRefresh { get; set; }
+        bool ImportIncompleteScheduled { get; set; }
+        int ImportIncompleteScheduleInterval { get; set; }
+        int ImportIncompleteRefreshDelay { get; set; }
+
         // Permissions (Media Management)
         bool SetPermissionsLinux { get; set; }
         string ChmodFolder { get; set; }

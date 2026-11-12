@@ -22,8 +22,10 @@ import {
   setEpisodesSort,
 } from 'Store/Actions/episodeSelectionActions';
 import createClientSideCollectionSelector from 'Store/Selectors/createClientSideCollectionSelector';
+import createUISettingsSelector from 'Store/Selectors/createUISettingsSelector';
 import { CheckInputChanged, InputChanged } from 'typings/inputs';
 import { SelectStateInputProps } from 'typings/props';
+import formatDate from 'Utilities/Date/formatDate';
 import getErrorMessage from 'Utilities/Object/getErrorMessage';
 import translate from 'Utilities/String/translate';
 import getSelectedIds from 'Utilities/Table/getSelectedIds';
@@ -45,6 +47,7 @@ const columns = [
     name: 'releaseDate',
     label: () => translate('ReleaseDate'),
     isVisible: true,
+    isSortable: true,
   },
 ];
 
@@ -89,6 +92,8 @@ function SelectEpisodeModalContent(props: SelectEpisodeModalContentProps) {
   const { allSelected, allUnselected, selectedState } = selectState;
   const { isFetching, isPopulated, items, error, sortKey, sortDirection } =
     useSelector(episodesSelector());
+  const uiSettings = useSelector(createUISettingsSelector());
+  const shortDateFormat = uiSettings?.shortDateFormat ?? 'DD.MM.YYYY';
   const dispatch = useDispatch();
 
   const errorMessage = getErrorMessage(error, translate('EpisodesLoadError'));
@@ -243,7 +248,11 @@ function SelectEpisodeModalContent(props: SelectEpisodeModalContentProps) {
                       id={item.id}
                       title={item.title}
                       actors={item.actors}
-                      releaseDate={item.releaseDate}
+                      releaseDate={
+                        item.releaseDate
+                          ? formatDate(item.releaseDate, shortDateFormat)
+                          : ''
+                      }
                       isSelected={selectedState[item.id]}
                       onSelectedChange={onSelectedChange}
                     />

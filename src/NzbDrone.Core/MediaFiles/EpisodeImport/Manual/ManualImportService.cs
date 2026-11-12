@@ -25,6 +25,7 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
         List<ManualImportItem> GetMediaFiles(int seriesId, int? seasonNumber);
         List<ManualImportItem> GetMediaFiles(string path, string downloadId, int? seriesId, bool filterExistingFiles);
         ManualImportItem ReprocessItem(string path, string downloadId, int seriesId, int? seasonNumber, List<int> episodeIds, string releaseGroup, QualityModel quality, List<Language> languages, int indexerFlags);
+        void ImportFiles(List<ManualImportFile> files, ImportMode importMode = ImportMode.Auto);
     }
 
     public class ManualImportService : IExecute<ManualImportCommand>, IManualImportService
@@ -550,6 +551,15 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Manual
             item.CustomFormats = _formatCalculator.ParseCustomFormat(episodeFile, series);
 
             return item;
+        }
+
+        public void ImportFiles(List<ManualImportFile> files, ImportMode importMode = ImportMode.Auto)
+        {
+            Execute(new ManualImportCommand
+            {
+                Files = files,
+                ImportMode = importMode
+            });
         }
 
         public void Execute(ManualImportCommand message)

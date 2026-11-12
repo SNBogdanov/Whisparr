@@ -58,6 +58,7 @@ export const weekColumnOptions: EnhancedSelectInputValue<string>[] = [
 ];
 
 const shortDateFormatOptions: EnhancedSelectInputValue<string>[] = [
+  createDateFormatOption('DD.MM.YYYY'),
   createDateFormatOption('MMM D YYYY'),
   createDateFormatOption('DD MMM YYYY'),
   createDateFormatOption('MM/D/YYYY'),
@@ -67,6 +68,7 @@ const shortDateFormatOptions: EnhancedSelectInputValue<string>[] = [
 ];
 
 const longDateFormatOptions: EnhancedSelectInputValue<string>[] = [
+  createDateFormatOption('D MMMM YYYY'),
   createDateFormatOption('dddd, MMMM D YYYY'),
   createDateFormatOption('dddd, D MMMM YYYY'),
 ];

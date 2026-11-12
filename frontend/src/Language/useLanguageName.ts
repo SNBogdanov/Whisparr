@@ -2,6 +2,8 @@ import moment from 'moment';
 import { useCallback, useEffect } from 'react';
 import useApiQuery from 'Helpers/Hooks/useApiQuery';
 
+import 'moment/locale/ru';
+
 interface LanguageResponse {
   identifier: string;
 }

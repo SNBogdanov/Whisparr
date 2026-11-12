@@ -12,6 +12,26 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
     public class GetSeriesFixture : CoreTest<ParsingService>
     {
         [Test]
+        public void should_fallback_to_title_slug_for_camel_case_site_token()
+        {
+            var series = new Series
+            {
+                Id = 67,
+                Title = "Hot and Mean",
+                CleanTitle = "hotmean",
+                TitleSlug = "hotandmean"
+            };
+
+            Mocker.GetMock<ISeriesService>()
+                  .Setup(s => s.FindByTitleSlug("HotAndMean"))
+                  .Returns(series);
+
+            var result = Subject.GetSeries("HotAndMean.26.10.20.Adriana.Chechik.And.Lily.Lou.mp4");
+
+            result.Should().Be(series);
+        }
+
+        [Test]
         public void should_use_passed_in_title_when_it_cannot_be_parsed()
         {
             const string title = "30 Stone";
@@ -20,6 +40,30 @@ namespace NzbDrone.Core.Test.ParserTests.ParsingServiceTests
 
             Mocker.GetMock<ISeriesService>()
                   .Verify(s => s.FindByTitle(title), Times.Once());
+        }
+
+        [TestCase("FTV Milfs.Alex.2022")]
+        [TestCase("FTVMilfs.Alex.2022")]
+        public void should_resolve_series_without_date_using_inexact_match(string title)
+        {
+            var series = new Series { TvdbId = 500, Title = "FTV Milfs" };
+
+            Mocker.GetMock<ISeriesService>()
+                  .Setup(s => s.FindByTitleInexact(title))
+                  .Returns(series);
+
+            var result = Subject.GetSeries(title, true);
+
+            result.Should().Be(series);
+        }
+
+        [Test]
+        public void should_not_use_inexact_match_by_default()
+        {
+            Subject.GetSeries("FTV Milfs.Alex.2022");
+
+            Mocker.GetMock<ISeriesService>()
+                  .Verify(s => s.FindByTitleInexact(It.IsAny<string>()), Times.Never());
         }
 
         [Test]

@@ -450,6 +450,103 @@ function MediaManagement() {
               </FieldSet>
             ) : null}
 
+            <FieldSet legend={translate('IncompleteImport')}>
+              <FormGroup size={sizes.MEDIUM}>
+                <FormLabel>{translate('ImportIncompleteEnabled')}</FormLabel>
+
+                <FormInputGroup
+                  type={inputTypes.CHECK}
+                  name="importIncompleteEnabled"
+                  helpText={translate('ImportIncompleteEnabledHelpText')}
+                  onChange={handleInputChange}
+                  {...settings.importIncompleteEnabled}
+                />
+              </FormGroup>
+
+              {settings.importIncompleteEnabled.value ? (
+                <>
+                  <FormGroup size={sizes.MEDIUM}>
+                    <FormLabel>{translate('ImportIncompleteFolder')}</FormLabel>
+
+                    <FormInputGroup
+                      type={inputTypes.PATH}
+                      name="importIncompleteFolder"
+                      includeFiles={false}
+                      helpText={translate('ImportIncompleteFolderHelpText')}
+                      onChange={handleInputChange}
+                      {...settings.importIncompleteFolder}
+                    />
+                  </FormGroup>
+
+                  <FormGroup size={sizes.MEDIUM}>
+                    <FormLabel>
+                      {translate('ImportIncompleteAfterRefresh')}
+                    </FormLabel>
+
+                    <FormInputGroup
+                      type={inputTypes.CHECK}
+                      name="importIncompleteAfterRefresh"
+                      helpText={translate(
+                        'ImportIncompleteAfterRefreshHelpText'
+                      )}
+                      onChange={handleInputChange}
+                      {...settings.importIncompleteAfterRefresh}
+                    />
+                  </FormGroup>
+
+                  <FormGroup size={sizes.MEDIUM}>
+                    <FormLabel>
+                      {translate('ImportIncompleteRefreshDelay')}
+                    </FormLabel>
+
+                    <FormInputGroup
+                      type={inputTypes.NUMBER}
+                      unit="seconds"
+                      name="importIncompleteRefreshDelay"
+                      helpText={translate(
+                        'ImportIncompleteRefreshDelayHelpText'
+                      )}
+                      onChange={handleInputChange}
+                      {...settings.importIncompleteRefreshDelay}
+                    />
+                  </FormGroup>
+
+                  <FormGroup size={sizes.MEDIUM}>
+                    <FormLabel>
+                      {translate('ImportIncompleteScheduled')}
+                    </FormLabel>
+
+                    <FormInputGroup
+                      type={inputTypes.CHECK}
+                      name="importIncompleteScheduled"
+                      helpText={translate('ImportIncompleteScheduledHelpText')}
+                      onChange={handleInputChange}
+                      {...settings.importIncompleteScheduled}
+                    />
+                  </FormGroup>
+
+                  {settings.importIncompleteScheduled.value ? (
+                    <FormGroup size={sizes.MEDIUM}>
+                      <FormLabel>
+                        {translate('ImportIncompleteScheduleInterval')}
+                      </FormLabel>
+
+                      <FormInputGroup
+                        type={inputTypes.NUMBER}
+                        unit="minutes"
+                        name="importIncompleteScheduleInterval"
+                        helpText={translate(
+                          'ImportIncompleteScheduleIntervalHelpText'
+                        )}
+                        onChange={handleInputChange}
+                        {...settings.importIncompleteScheduleInterval}
+                      />
+                    </FormGroup>
+                  ) : null}
+                </>
+              ) : null}
+            </FieldSet>
+
             <FieldSet legend={translate('FileManagement')}>
               <FormGroup size={sizes.MEDIUM}>
                 <FormLabel>{translate('UnmonitorDeletedEpisodes')}</FormLabel>

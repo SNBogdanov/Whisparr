@@ -198,6 +198,19 @@ namespace NzbDrone.Core.MediaFiles.EpisodeImport.Aggregation.Aggregators
                 return true;
             }
 
+            if (otherEpisodeInfo == null)
+            {
+                return false;
+            }
+
+            if (fileEpisodeInfo.AirDate.IsNotNullOrWhiteSpace() ||
+                fileEpisodeInfo.EpisodeToken.IsNotNullOrWhiteSpace() ||
+                (fileEpisodeInfo.SceneIds != null && fileEpisodeInfo.SceneIds.Any()) ||
+                fileEpisodeInfo.SeasonNumber > 0)
+            {
+                return false;
+            }
+
             return true;
         }
 

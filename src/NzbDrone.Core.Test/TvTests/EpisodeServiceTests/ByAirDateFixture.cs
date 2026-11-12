@@ -103,6 +103,25 @@ namespace NzbDrone.Core.Test.TvTests.EpisodeServiceTests
         }
 
         [Test]
+        public void should_match_episode_when_release_contains_significant_part_of_episode_title()
+        {
+            var episode1 = CreateEpisode(2021, 1, "Aria Kai", "The Road Trip: Raunchy RV-Ing", aridate: "2021-05-20");
+            var episode2 = CreateEpisode(2021, 2, "Aria Kai", "The Road Trip: Gas Station Glory Hole", aridate: "2021-05-20");
+
+            episode2.Actors = new List<Actor>
+            {
+                new Actor { Name = "Aria Kai", Gender = Gender.Female },
+                new Actor { Name = "Ebony Mystique", Gender = Gender.Female }
+            };
+
+            GivenEpisodes(episode1, episode2);
+
+            var result = Subject.FindEpisode(SERIES_ID, "2021-05-20", " .Aria.Kai.And.Ebony.Mystique.Gas.Station.Glory.Hole.XXX.1080p.HEVC.x265.PRT");
+
+            result.Should().Be(episode2);
+        }
+
+        [Test]
         public void should_normalize_episode_titles_for_compare()
         {
             var episode1 = CreateEpisode(2023, 1, "Jenna Jay", "Get Some");
