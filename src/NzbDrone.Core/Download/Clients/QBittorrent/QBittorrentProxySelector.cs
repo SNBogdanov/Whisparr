@@ -34,11 +34,13 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
     {
         IQBittorrentProxy GetProxy(QBittorrentSettings settings, bool force = false);
         Version GetApiVersion(QBittorrentSettings settings, bool force = false);
+        QBittorrentPreferences GetConfig(QBittorrentSettings settings, bool force = false);
     }
 
     public class QBittorrentProxySelector : IQBittorrentProxySelector
     {
         private readonly ICached<Tuple<IQBittorrentProxy, Version>> _proxyCache;
+        private readonly ICached<QBittorrentPreferences> _configCache;
         private readonly Logger _logger;
 
         private readonly IQBittorrentProxy _proxyV1;
@@ -50,6 +52,7 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
                                          Logger logger)
         {
             _proxyCache = cacheManager.GetCache<Tuple<IQBittorrentProxy, Version>>(GetType());
+            _configCache = cacheManager.GetCache<QBittorrentPreferences>(GetType(), "config");
             _logger = logger;
 
             _proxyV1 = proxyV1;
@@ -66,13 +69,31 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
             return GetProxyCache(settings, force).Item2;
         }
 
+        public QBittorrentPreferences GetConfig(QBittorrentSettings settings, bool force)
+        {
+            var proxyKey = GetProxyKey(settings);
+
+            if (force)
+            {
+                _configCache.Remove(proxyKey);
+            }
+
+            return _configCache.Get(proxyKey, () => GetProxy(settings, false).GetConfig(settings), TimeSpan.FromMinutes(10.0));
+        }
+
+        private static string GetProxyKey(QBittorrentSettings settings)
+        {
+            return $"{settings.Host}_{settings.Port}";
+        }
+
         private Tuple<IQBittorrentProxy, Version> GetProxyCache(QBittorrentSettings settings, bool force)
         {
-            var proxyKey = $"{settings.Host}_{settings.Port}";
+            var proxyKey = GetProxyKey(settings);
 
             if (force)
             {
                 _proxyCache.Remove(proxyKey);
+                _configCache.Remove(proxyKey);
             }
 
             return _proxyCache.Get(proxyKey, () => FetchProxy(settings), TimeSpan.FromMinutes(10.0));

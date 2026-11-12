@@ -4,6 +4,7 @@ using System.Data.SQLite;
 using NLog;
 using NLog.Common;
 using NLog.Config;
+using NLog.Filters;
 using NLog.Targets;
 using Npgsql;
 using NzbDrone.Common.Instrumentation;
@@ -29,7 +30,22 @@ namespace NzbDrone.Core.Instrumentation
         {
             var target = new SlowRunningAsyncTargetWrapper(this) { TimeToSleepBetweenBatches = 500 };
 
-            Rule = new LoggingRule("*", LogLevel.Info, target);
+            Rule = new LoggingRule("*", LogLevel.Info, target)
+            {
+                FilterDefaultAction = FilterResult.Log
+            };
+
+            // ASP.NET Core logs every request at Info level, which can fill the log database under load.
+            // Keep warnings and errors, but don't store routine request logging.
+            Rule.Filters.Add(new WhenMethodFilter(logEvent =>
+            {
+                if (logEvent.LoggerName.StartsWith("Microsoft.AspNetCore", StringComparison.Ordinal) && logEvent.Level < LogLevel.Warn)
+                {
+                    return FilterResult.Ignore;
+                }
+
+                return FilterResult.Neutral;
+            }));
 
             LogManager.Configuration.AddTarget("DbLogger", target);
             LogManager.Configuration.LoggingRules.Add(Rule);

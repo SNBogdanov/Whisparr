@@ -45,6 +45,33 @@ namespace NzbDrone.Core.Test.InstrumentationTests
         }
 
         [Test]
+        public void should_not_write_microsoft_aspnet_info_log()
+        {
+            var logger = LogManager.GetLogger("Microsoft.AspNetCore.Test");
+
+            logger.Info(_uniqueMessage);
+
+            Thread.Sleep(1000);
+
+            AllStoredModels.Should().BeEmpty();
+        }
+
+        [Test]
+        public void should_write_microsoft_aspnet_warn_log()
+        {
+            var logger = LogManager.GetLogger("Microsoft.AspNetCore.Test");
+
+            logger.Warn(_uniqueMessage);
+
+            Thread.Sleep(1000);
+
+            StoredModel.Message.Should().Be(_uniqueMessage);
+            StoredModel.Level.Should().Be("Warn");
+
+            ExceptionVerification.ExpectedWarns(1);
+        }
+
+        [Test]
         public void write_long_log()
         {
             var message = string.Empty;

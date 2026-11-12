@@ -26,6 +26,20 @@ namespace Whisparr.Api.V3.Parse
             _formatCalculator = formatCalculator;
         }
 
+        [HttpGet("series")]
+        [Produces("application/json")]
+        [ProducesResponseType(typeof(SeriesResource), 200)]
+        [ProducesResponseType(204)]
+        public SeriesResource ParseSeries(string title)
+        {
+            if (title.IsNullOrWhiteSpace())
+            {
+                return null;
+            }
+
+            return _parsingService.GetSeries(title, true)?.ToResource();
+        }
+
         [HttpGet]
         [Produces("application/json")]
         [ProducesResponseType(typeof(ParseResource), 200)]

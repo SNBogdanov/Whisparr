@@ -53,6 +53,7 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
 
         private IQBittorrentProxy Proxy => _proxySelector.GetProxy(Settings);
         private Version ProxyApiVersion => _proxySelector.GetApiVersion(Settings);
+        private QBittorrentPreferences ProxyConfig => _proxySelector.GetConfig(Settings);
 
         public override void MarkItemAsImported(DownloadClientItem downloadClientItem)
         {
@@ -260,8 +261,8 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
 
         public override IEnumerable<DownloadClientItem> GetItems()
         {
-            var version = Proxy.GetApiVersion(Settings);
-            var config = Proxy.GetConfig(Settings);
+            var version = ProxyApiVersion;
+            var config = ProxyConfig;
             var torrents = Proxy.GetTorrents(Settings);
 
             var queueItems = new List<DownloadClientItem>();
@@ -414,8 +415,8 @@ namespace NzbDrone.Core.Download.Clients.QBittorrent
 
         public override DownloadClientInfo GetStatus()
         {
-            var version = Proxy.GetApiVersion(Settings);
-            var config = Proxy.GetConfig(Settings);
+            var version = ProxyApiVersion;
+            var config = ProxyConfig;
 
             var destDir = new OsPath(config.SavePath);
 

@@ -48,6 +48,10 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.QBittorrentTests
             Mocker.GetMock<IQBittorrentProxySelector>()
                   .Setup(s => s.GetProxy(It.IsAny<QBittorrentSettings>(), It.IsAny<bool>()))
                   .Returns(Mocker.GetMock<IQBittorrentProxy>().Object);
+
+            Mocker.GetMock<IQBittorrentProxySelector>()
+                  .Setup(s => s.GetConfig(It.IsAny<QBittorrentSettings>(), It.IsAny<bool>()))
+                  .Returns<QBittorrentSettings, bool>((settings, force) => Mocker.GetMock<IQBittorrentProxy>().Object.GetConfig(settings));
         }
 
         protected void GivenRedirectToMagnet()
@@ -572,8 +576,8 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.QBittorrentTests
                 .Setup(v => v.GetConfig(It.IsAny<QBittorrentSettings>()))
                 .Returns(config);
 
-            Mocker.GetMock<IQBittorrentProxy>()
-                .Setup(v => v.GetApiVersion(It.IsAny<QBittorrentSettings>()))
+            Mocker.GetMock<IQBittorrentProxySelector>()
+                .Setup(v => v.GetApiVersion(It.IsAny<QBittorrentSettings>(), It.IsAny<bool>()))
                 .Returns(new Version(2, 0));
 
             Mocker.GetMock<IQBittorrentProxy>()
@@ -981,6 +985,38 @@ namespace NzbDrone.Core.Test.Download.DownloadClientTests.QBittorrentTests
             var json = "{ \"eta\": 18446744073709335000 }";
             var torrent = Newtonsoft.Json.JsonConvert.DeserializeObject<QBittorrentTorrent>(json);
             torrent.Eta.ToString().Should().Be("18446744073709335000");
+        }
+
+        [Test]
+        public void GetItems_should_use_cached_api_version()
+        {
+            GivenTorrents(new List<QBittorrentTorrent>());
+
+            Subject.GetItems();
+
+            Mocker.GetMock<IQBittorrentProxy>()
+                  .Verify(v => v.GetApiVersion(It.IsAny<QBittorrentSettings>()), Times.Never());
+
+            Mocker.GetMock<IQBittorrentProxySelector>()
+                  .Verify(v => v.GetApiVersion(It.IsAny<QBittorrentSettings>(), It.IsAny<bool>()), Times.Once());
+        }
+
+        [Test]
+        public void GetItems_should_use_cached_preferences()
+        {
+            GivenTorrents(new List<QBittorrentTorrent>());
+
+            Mocker.GetMock<IQBittorrentProxySelector>()
+                  .Setup(s => s.GetConfig(It.IsAny<QBittorrentSettings>(), It.IsAny<bool>()))
+                  .Returns(new QBittorrentPreferences());
+
+            Subject.GetItems();
+
+            Mocker.GetMock<IQBittorrentProxy>()
+                  .Verify(v => v.GetConfig(It.IsAny<QBittorrentSettings>()), Times.Never());
+
+            Mocker.GetMock<IQBittorrentProxySelector>()
+                  .Verify(v => v.GetConfig(It.IsAny<QBittorrentSettings>(), It.IsAny<bool>()), Times.Once());
         }
 
         [Test]
